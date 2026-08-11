@@ -33,6 +33,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `pkg/api`: low-level HTTP and GraphQL protocol
 - `pkg/branch`: branch lifecycle and types
 - `pkg/schema`: schema discovery, validation, and loading
+- `pkg/task`: background-task filtering and polling
 - `pkg/config`: strict TOML and environment configuration
 - `pkg/node`: generic operations for schema-defined objects
 - `pkg/objectstore`: stored objects and text-file retrieval
@@ -142,6 +143,20 @@ file, err := client.ObjectStore.GetFileByID(ctx, nodeID)
 
 Stored objects and text-file endpoints preserve base paths, escape identifiers, and honor response-size limits. See the [object-store guide](docs/object-store.md).
 
+## Tasks
+
+```go
+tasks, err := client.Tasks.All(ctx, infrahub.TaskListOptions{
+    Filter: infrahub.TaskFilter{States: []infrahub.TaskState{
+        infrahub.TaskStateRunning,
+    }},
+})
+
+task, err := client.Tasks.Wait(ctx, taskID, time.Second)
+```
+
+Task filters, logs, related nodes, pagination and cancellation-aware polling are supported. See the [tasks guide](docs/tasks.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -152,5 +167,6 @@ Stored objects and text-file endpoints preserve base paths, escape identifiers, 
 - Repository discovery across branches and protected commit updates
 - Request-scoped tracker overrides and concurrent tracking groups
 - Stored object upload/download and text-file retrieval by storage ID, node ID, or HFID
+- Background-task filtering, pagination, lookup, counts, logs and polling
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.
