@@ -1,0 +1,181 @@
+version: 2
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # Exporter build
+  - main: cmd/infrahubctl/main.go
+    binary: infrahubctl
+    id: infrahub-go-sdk
+
+    env:
+      - CGO_ENABLED=0
+
+    goos:
+      - "windows"
+      - "linux"
+      - "darwin"
+    goarch:
+      - "amd64"
+      - "386"
+      - "arm"
+      - "arm64"
+    goarm: [ "6", "7" ]
+    flags:
+      - -trimpath
+    ignore:
+      - goos: "darwin"
+        goarch: "386"
+      - goos: "windows"
+        goarch: "arm"
+      - goos: "windows"
+        goarch: "arm64"
+
+archives:
+  - formats: [ zip ]
+    name_template: >-
+      {{- .ProjectName }}_{{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end -}}
+
+nfpms:
+  - maintainer: &author Helvethink <technical@helvethink.ch>
+    description: &description GitLab CI exporter (prometheus/open-metrics)
+    license: &license Apache-2.0
+    homepage: &homepage https://github.com/helvethink/infrahub-go-sdk
+    vendor: *author
+    file_name_template: '{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    bindir: /usr/local/bin
+    formats:
+      - apk
+      - deb
+      - rpm
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/doc/{{ .ProjectName }}/copyright
+        file_info:
+          mode: 0644
+
+dockers:
+  - image_templates:
+      - 'docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}'
+      - 'ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}'
+      - 'quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}'
+      - 'docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}-amd64'
+      - 'ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}-amd64'
+      - 'quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}-amd64'
+      - 'docker.io/helvethink/infrahub-go-sdk:latest'
+      - 'ghcr.io/helvethink/infrahub-go-sdk:latest'
+      - 'quay.io/helvethink/infrahub-go-sdk:latest'
+    ids: [infrahub-go-sdk]
+    goarch: amd64
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --build-arg=VERSION={{ .Version }}
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/helvethink/infrahub-go-sdk
+      - --label=org.opencontainers.image.source=https://github.com/helvethink/infrahub-go-sdk
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+
+  - image_templates:
+      - 'docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}-arm64'
+      - 'ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}-arm64'
+      - 'quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}-arm64'
+    ids: [infrahub-go-sdk]
+    goarch: arm64
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --build-arg=VERSION={{ .Version }}
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/helvethink/infrahub-go-sdk
+      - --label=org.opencontainers.image.source=https://github.com/helvethink/infrahub-go-sdk
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+
+  - image_templates:
+      - 'docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv6'
+      - 'ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv6'
+      - 'quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv6'
+    ids: [infrahub-go-sdk]
+    goarch: arm
+    goarm: 6
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm/v6
+      - --build-arg=VERSION={{ .Version }}
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/helvethink/infrahub-go-sdk
+      - --label=org.opencontainers.image.source=https://github.com/helvethink/infrahub-go-sdk
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+
+  - image_templates:
+      - 'docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv7'
+      - 'ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv7'
+      - 'quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv7'
+    ids: [infrahub-go-sdk]
+    goarch: arm
+    goarm: 7
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm/v7
+      - --build-arg=VERSION={{ .Version }}
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/helvethink/infrahub-go-sdk
+      - --label=org.opencontainers.image.source=https://github.com/helvethink/infrahub-go-sdk
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+
+docker_manifests:
+  - name_template: docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}
+    image_templates:
+      - docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}
+      - docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}-amd64
+      - docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}-arm64
+      - docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv6
+      - docker.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv7
+
+  - name_template: ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}
+    image_templates:
+      - ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}
+      - ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}-amd64
+      - ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}-arm64
+      - ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv6
+      - ghcr.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv7
+
+  - name_template: quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}
+    image_templates:
+      - quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}
+      - quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}-amd64
+      - quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}-arm64
+      - quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv6
+      - quay.io/helvethink/infrahub-go-sdk:{{ .Tag }}-armv7
+
+sboms:
+  - id: cyclonedx
+    documents:
+      - "${artifact}_${os}_${arch}.spdx.json"
+    cmd: syft
+    args: ["$artifact", "--output", "cyclonedx-json=$document"]
+    artifacts: archive
+
+checksum:
+  algorithm: sha256
