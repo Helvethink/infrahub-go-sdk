@@ -105,6 +105,8 @@ tag, err := client.Nodes.Create(ctx, "BuiltinTag", map[string]any{
 }, "main")
 ```
 
+Dynamic filters and nested selections are available through `client.Nodes.Query`. See the [dynamic query guide](docs/dynamic-queries.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors

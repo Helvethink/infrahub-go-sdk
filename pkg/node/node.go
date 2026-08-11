@@ -70,24 +70,10 @@ type MutationResult struct {
 	Object *Node `json:"object"`
 }
 
-// List returns identity fields for a page of nodes. Use Client.Execute when
-// custom attributes or relationships must be selected.
+// List returns identity fields for a page of nodes. Use Query for dynamic
+// filters, attributes, or relationships.
 func (s *Service) List(ctx context.Context, kind string, offset, limit int, branch string) (*Page, error) {
-	if err := validateKind(kind); err != nil {
-		return nil, err
-	}
-	if offset < 0 || limit < 0 {
-		return nil, fmt.Errorf("infrahub: offset and limit must not be negative")
-	}
-	operation := "List" + kind
-	page, err := s.queryPage(ctx, kind, api.GraphQLRequest{
-		Query:     `query ` + operation + `($offset: Int, $limit: Int) { ` + kind + `(offset: $offset, limit: $limit) { count edges { node { ` + identityFields + ` } } } }`,
-		Variables: map[string]any{"offset": offset, "limit": limit}, OperationName: operation, Branch: branch,
-	})
-	if page != nil {
-		page.Offset, page.Limit = offset, limit
-	}
-	return page, err
+	return s.Query(ctx, kind, QueryOptions{Offset: offset, Limit: limit, Branch: branch})
 }
 
 // GetByID returns a node by its UUID.
