@@ -16,7 +16,7 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | graph traversal | Planned | dedicated traversal service |
 | diff summary/tree | Planned | dedicated diff service |
 | IP address/prefix allocation | Planned | resource-pool service |
-| batches | Planned | Go concurrency helper |
+| batches | Available | `pkg/batch.Run` and `pkg/batch.Map` |
 | tasks | Available | `Client.Tasks` and `pkg/task` |
 | object/file store | Available | `Client.ObjectStore` and `pkg/objectstore` |
 | tracking/group context | Available | `tracking.WithTracker`, `tracking.Group` |

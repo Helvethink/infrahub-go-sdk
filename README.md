@@ -30,6 +30,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 ## Packages
 
 - `infrahub`: client facade and configuration
+- `pkg/batch`: generic bounded concurrent execution
 - `pkg/api`: low-level HTTP and GraphQL protocol
 - `pkg/branch`: branch lifecycle and types
 - `pkg/schema`: schema discovery, validation, and loading
@@ -157,6 +158,16 @@ task, err := client.Tasks.Wait(ctx, taskID, time.Second)
 
 Task filters, logs, related nodes, pagination and cancellation-aware polling are supported. See the [tasks guide](docs/tasks.md).
 
+## Batches
+
+```go
+results, err := batch.Map(ctx, nodeIDs, func(ctx context.Context, id string) (*infrahub.Node, error) {
+    return client.Nodes.GetByID(ctx, "BuiltinDevice", id, "main")
+}, batch.Options{Concurrency: 5})
+```
+
+Batch results retain input indexes and support fail-fast or per-result error collection. See the [batches guide](docs/batches.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -168,5 +179,6 @@ Task filters, logs, related nodes, pagination and cancellation-aware polling are
 - Request-scoped tracker overrides and concurrent tracking groups
 - Stored object upload/download and text-file retrieval by storage ID, node ID, or HFID
 - Background-task filtering, pagination, lookup, counts, logs and polling
+- Generic bounded batches with cancellation and configurable error collection
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.
