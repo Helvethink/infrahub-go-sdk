@@ -14,8 +14,9 @@ import (
 )
 
 type payload struct {
-	Query         string `json:"query"`
-	OperationName string `json:"operationName"`
+	Query         string         `json:"query"`
+	Variables     map[string]any `json:"variables"`
+	OperationName string         `json:"operationName"`
 }
 
 func newTestService(t *testing.T, handler http.HandlerFunc) (*Service, *httptest.Server) {
@@ -95,5 +96,124 @@ func TestRejectsGraphQLInjectionInKind(t *testing.T) {
 	_, err := service.Create(context.Background(), "Tag) { secret }", nil, "")
 	if err == nil {
 		t.Fatal("Create() error = nil")
+	}
+}
+
+func TestQueryDynamicFiltersAndSelections(t *testing.T) {
+	t.Parallel()
+	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		var request payload
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		checks := []string{
+			"$filter0: String!", "$filter1: [ID!]!", "name__value: $filter0",
+			"member_of_groups__ids: $filter1", "name { value }",
+			"site { node { id display_label } }",
+		}
+		for _, expected := range checks {
+			if !strings.Contains(request.Query, expected) {
+				t.Errorf("query does not contain %q: %s", expected, request.Query)
+			}
+		}
+		if strings.Contains(request.Query, "staging") {
+			t.Errorf("filter value was interpolated: %s", request.Query)
+		}
+		if request.Variables["filter0"] != "staging" {
+			t.Errorf("variables = %#v", request.Variables)
+		}
+		_, _ = w.Write([]byte(`{"data":{"BuiltinTag":{"count":1,"edges":[{"node":{"id":"tag-id","kind":"BuiltinTag","hfid":["staging"],"display_label":"staging","name":{"value":"staging"},"site":{"node":{"id":"site-id","display_label":"Paris"}}}}]}}}`))
+	})
+	defer server.Close()
+	page, err := service.Query(context.Background(), "BuiltinTag", QueryOptions{
+		Branch: "main", Offset: 10, Limit: 25,
+		Filters: []Filter{
+			{Name: "name__value", Value: "staging"},
+			{Name: "member_of_groups__ids", Value: []string{"group-id"}, Type: "[ID!]!"},
+		},
+		Selections: []Selection{
+			Select("name", Select("value")),
+			Select("site", Select("node", Select("id"), Select("display_label"))),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Count != 1 || page.Offset != 10 || page.Limit != 25 {
+		t.Fatalf("page = %#v", page)
+	}
+	name, ok := page.Nodes[0].Fields["name"].(map[string]any)
+	if !ok || name["value"] != "staging" {
+		t.Fatalf("dynamic fields = %#v", page.Nodes[0].Fields)
+	}
+}
+
+func TestQuerySupportsExplicitInfrahubScalar(t *testing.T) {
+	t.Parallel()
+	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		var request payload
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		if !strings.Contains(request.Query, "$filter0: BigInt!") {
+			t.Errorf("query = %s", request.Query)
+		}
+		_, _ = w.Write([]byte(`{"data":{"BuiltinIPPrefix":{"count":0,"edges":[]}}}`))
+	})
+	defer server.Close()
+	_, err := service.Query(context.Background(), "BuiltinIPPrefix", QueryOptions{
+		Filters: []Filter{{Name: "utilization__value", Value: int64(5_000_000_000), Type: "BigInt!"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQueryRejectsUnsafeDocumentParts(t *testing.T) {
+	t.Parallel()
+	service := NewService(nil)
+	tests := []struct {
+		name    string
+		options QueryOptions
+	}{
+		{name: "filter name", options: QueryOptions{Filters: []Filter{{Name: "name) { secret", Value: "x"}}}},
+		{name: "filter type", options: QueryOptions{Filters: []Filter{{Name: "name__value", Value: "x", Type: "String!) { secret"}}}},
+		{name: "selection", options: QueryOptions{Selections: []Selection{Select("name { secret")}}},
+		{name: "nested duplicate", options: QueryOptions{Selections: []Selection{Select("name", Select("value"), Select("value"))}}},
+		{name: "top-level duplicate", options: QueryOptions{Selections: []Selection{Select("name"), Select("name")}}},
+		{name: "duplicate filter", options: QueryOptions{Filters: []Filter{{Name: "name__value", Value: "a"}, {Name: "name__value", Value: "b"}}}},
+		{
+			name: "unknown value type",
+			options: QueryOptions{
+				Filters: []Filter{{Name: "name__value", Value: struct{}{}}},
+			},
+		},
+		{name: "oversized int", options: QueryOptions{Filters: []Filter{{Name: "number__value", Value: int64(5_000_000_000)}}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := service.Query(context.Background(), "BuiltinTag", test.options); err == nil {
+				t.Fatal("Query() error = nil")
+			}
+		})
+	}
+}
+
+func TestGraphQLTypeValidation(t *testing.T) {
+	t.Parallel()
+	valid := []string{"String", "String!", "[ID!]", "[ID!]!", "[[String!]!]!", "InfrahubCustomScalar"}
+	for _, value := range valid {
+		if !isGraphQLType(value) {
+			t.Errorf("isGraphQLType(%q) = false", value)
+		}
+	}
+	invalid := []string{"", "1String", "String!!", "[String", "String]", "[String]! extra", "String) { secret"}
+	for _, value := range invalid {
+		if isGraphQLType(value) {
+			t.Errorf("isGraphQLType(%q) = true", value)
+		}
 	}
 }

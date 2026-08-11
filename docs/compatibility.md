@@ -12,7 +12,7 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | schema fetch/load/check/SDL | Available | `Client.Schema` |
 | generic node create/update/delete | Available | `Client.Nodes` |
 | identity-only `get`, `all`, pagination | Available | `GetByID`, `GetByHFID`, `List` |
-| dynamic attribute filters/selections | Planned | schema-aware query builder or `Execute` |
+| dynamic attribute filters/selections | Available | `node.Service.Query` |
 | graph traversal | Planned | dedicated traversal service |
 | diff summary/tree | Planned | dedicated diff service |
 | IP address/prefix allocation | Planned | resource-pool service |
