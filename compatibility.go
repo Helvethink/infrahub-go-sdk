@@ -6,6 +6,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/branch"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/objectstore"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/repository"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/tracking"
@@ -41,6 +42,10 @@ type (
 	NodePage           = node.Page
 	NodeMutationResult = node.MutationResult
 	NodeService        = node.Service
+
+	ObjectStoreService                     = objectstore.Service
+	ObjectStoreUploadResult                = objectstore.UploadResult
+	ObjectStoreUnsupportedContentTypeError = objectstore.UnsupportedContentTypeError
 
 	Repository                    = repository.Repository
 	RepositoryBranchState         = repository.BranchState

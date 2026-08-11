@@ -88,6 +88,13 @@ type GraphQLRequest struct {
 	Headers       http.Header
 }
 
+// HTTPResponse contains the bounded body and metadata of a successful request.
+type HTTPResponse struct {
+	StatusCode int
+	Header     http.Header
+	Body       []byte
+}
+
 type graphQLPayload struct {
 	Query         string         `json:"query"`
 	Variables     map[string]any `json:"variables,omitempty"`
@@ -143,9 +150,49 @@ func (c *Client) Endpoint(path string, query url.Values) *url.URL {
 	return &u
 }
 
+// EndpointSegments resolves individually escaped REST path segments relative
+// to the configured base URL.
+func (c *Client) EndpointSegments(segments []string, query url.Values) *url.URL {
+	u := *c.baseURL
+	path := strings.TrimRight(c.baseURL.Path, "/")
+	rawPath := strings.TrimRight(c.baseURL.EscapedPath(), "/")
+	for _, segment := range segments {
+		path += "/" + segment
+		rawPath += "/" + escapePathSegment(segment)
+	}
+	u.Path = path
+	u.RawPath = rawPath
+	u.RawQuery = query.Encode()
+	return &u
+}
+
+func escapePathSegment(segment string) string {
+	switch segment {
+	case ".":
+		return "%2E"
+	case "..":
+		return "%2E%2E"
+	default:
+		return url.PathEscape(segment)
+	}
+}
+
 // Do executes one HTTP request. It is exported for domain service packages;
 // application code should normally use a higher-level service.
 func (c *Client) Do(ctx context.Context, method string, endpoint *url.URL, body io.Reader, headers http.Header, tracker string) ([]byte, error) {
+	response, err := c.DoResponse(ctx, method, endpoint, body, headers, tracker)
+	if err != nil {
+		return nil, err
+	}
+	return response.Body, nil
+}
+
+// DoResponse executes one HTTP request and returns its bounded body and
+// response metadata. It is intended for domain services that need headers.
+func (c *Client) DoResponse(ctx context.Context, method string, endpoint *url.URL, body io.Reader, headers http.Header, tracker string) (*HTTPResponse, error) {
+	if override, ok := requestcontext.Tracker(ctx); ok {
+		tracker = override
+	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint.String(), body)
 	if err != nil {
 		return nil, fmt.Errorf("infrahub: build %s request: %w", method, err)
@@ -178,7 +225,7 @@ func (c *Client) Do(ctx context.Context, method string, endpoint *url.URL, body 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &HTTPError{resp.StatusCode, method, endpoint.Redacted(), safeExcerpt(data, 1024, c.token)}
 	}
-	return data, nil
+	return &HTTPResponse{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: data}, nil
 }
 
 func (c *Client) graphQLEndpoint(branch string, at time.Time) *url.URL {
