@@ -6,7 +6,7 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | --- | --- | --- |
 | `execute_graphql` | Available | `Client.Execute` |
 | API-token authentication | Available | `WithAPIToken` |
-| TOML and environment configuration | Available | `config` package and `infrahubctl` |
+| TOML and environment configuration | Available | `pkg/config` and `infrahubctl` |
 | default/request branch and `at` | Available | `WithDefaultBranch`, `GraphQLRequest` |
 | branch manager | Available | `Client.Branches` |
 | schema fetch/load/check/SDL | Available | `Client.Schema` |

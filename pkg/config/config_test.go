@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Helvethink/infrahub-go-sdk/config"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/config"
 )
 
 func TestDecode(t *testing.T) {

@@ -30,15 +30,15 @@ All network operations accept `context.Context`. A client is safe for concurrent
 ## Packages
 
 - `infrahub`: client facade and configuration
-- `api`: low-level HTTP and GraphQL protocol
-- `branch`: branch lifecycle and types
-- `schema`: schema discovery, validation, and loading
-- `config`: strict TOML and environment configuration
-- `node`: generic operations for schema-defined objects
+- `pkg/api`: low-level HTTP and GraphQL protocol
+- `pkg/branch`: branch lifecycle and types
+- `pkg/schema`: schema discovery, validation, and loading
+- `pkg/config`: strict TOML and environment configuration
+- `pkg/node`: generic operations for schema-defined objects
 - `cmd/infrahubctl`: executable entry point
 - `internal/cli`: testable, non-public CLI implementation
 
-Most applications should import only the root package. Domain packages are available when their types or constructors are needed directly.
+Most applications should import only the root package. Packages under `pkg/` are available for deliberate advanced use; implementation details remain under `internal/`.
 
 See the [Python SDK porting map](docs/compatibility.md) for implemented and planned capabilities.
 

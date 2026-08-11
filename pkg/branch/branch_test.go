@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Helvethink/infrahub-go-sdk/api"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
 
 type payload struct {

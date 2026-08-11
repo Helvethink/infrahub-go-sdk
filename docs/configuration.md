@@ -1,6 +1,6 @@
 # Configuration
 
-The SDK can be configured directly with Go options or through the `config` package. The `infrahubctl` command supports TOML, environment variables, and flags.
+The SDK can be configured directly with Go options or through the `pkg/config` package. The `infrahubctl` command supports TOML, environment variables, and flags.
 
 ## TOML file
 
@@ -46,6 +46,8 @@ Prefer the environment or a protected TOML file for the token; command-line toke
 ## Go applications
 
 ```go
+import "github.com/Helvethink/infrahub-go-sdk/pkg/config"
+
 settings, err := config.Load("infrahub.toml")
 if err != nil {
     return err
