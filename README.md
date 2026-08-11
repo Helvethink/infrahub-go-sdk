@@ -35,6 +35,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `pkg/schema`: schema discovery, validation, and loading
 - `pkg/config`: strict TOML and environment configuration
 - `pkg/node`: generic operations for schema-defined objects
+- `pkg/objectstore`: stored objects and text-file retrieval
 - `pkg/repository`: repository discovery and commit tracking
 - `pkg/tracking`: request trackers and group collection
 - `cmd/infrahubctl`: executable entry point
@@ -131,6 +132,16 @@ result, err := group.Save(ctx, client)
 
 Tracking is request-scoped and safe for concurrent workflows. See the [tracking and group-context guide](docs/tracking.md).
 
+## Object and file storage
+
+```go
+uploaded, err := client.ObjectStore.Upload(ctx, "generated configuration")
+content, err := client.ObjectStore.Get(ctx, uploaded.Identifier)
+file, err := client.ObjectStore.GetFileByID(ctx, nodeID)
+```
+
+Stored objects and text-file endpoints preserve base paths, escape identifiers, and honor response-size limits. See the [object-store guide](docs/object-store.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -140,5 +151,6 @@ Tracking is request-scoped and safe for concurrent workflows. See the [tracking 
 - Generic node list/get-by-ID/get-by-HFID with offset pagination
 - Repository discovery across branches and protected commit updates
 - Request-scoped tracker overrides and concurrent tracking groups
+- Stored object upload/download and text-file retrieval by storage ID, node ID, or HFID
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.
