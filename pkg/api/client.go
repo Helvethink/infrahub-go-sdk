@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Helvethink/infrahub-go-sdk/internal/requestcontext"
 )
 
 const defaultMaxBodyBytes = int64(16 << 20)
@@ -106,7 +108,11 @@ func (c *Client) Execute(ctx context.Context, request GraphQLRequest, dst any) e
 	if err != nil {
 		return fmt.Errorf("infrahub: encode GraphQL request: %w", err)
 	}
-	body, err := c.Do(ctx, http.MethodPost, c.graphQLEndpoint(request.Branch, request.At), bytes.NewReader(payload), request.Headers, request.Tracker)
+	tracker := request.Tracker
+	if override, ok := requestcontext.Tracker(ctx); ok {
+		tracker = override
+	}
+	body, err := c.Do(ctx, http.MethodPost, c.graphQLEndpoint(request.Branch, request.At), bytes.NewReader(payload), request.Headers, tracker)
 	if err != nil {
 		return err
 	}

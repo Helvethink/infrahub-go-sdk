@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Helvethink/infrahub-go-sdk/internal/requestcontext"
 )
 
 type receivedPayload struct {
@@ -61,6 +63,33 @@ func TestExecuteRequestAndPartialData(t *testing.T) {
 	}
 	if gotToken != "top-secret" || gotTracker != "test" {
 		t.Errorf("headers token=%q tracker=%q", gotToken, gotTracker)
+	}
+}
+
+func TestContextTrackerOverridesAndSuppressesRequestTracker(t *testing.T) {
+	t.Parallel()
+	trackers := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		trackers <- r.Header.Get("X-Infrahub-Tracker")
+		_, _ = w.Write([]byte(`{"data":{"ok":true}}`))
+	}))
+	defer server.Close()
+	client, err := NewClient(server.URL, testConfig(server.Client()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := GraphQLRequest{Query: "query Test { ok }", Tracker: "service-default"}
+	if err := client.Execute(requestcontext.WithTracker(context.Background(), "workflow"), request, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Execute(requestcontext.WithTracker(context.Background(), ""), request, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-trackers; got != "workflow" {
+		t.Fatalf("override tracker = %q", got)
+	}
+	if got := <-trackers; got != "" {
+		t.Fatalf("suppressed tracker = %q", got)
 	}
 }
 

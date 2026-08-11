@@ -1,12 +1,25 @@
 package infrahub
 
 import (
+	"context"
+
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/branch"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/repository"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/tracking"
 )
+
+// WithTracker returns a child context carrying a request tracker override.
+func WithTracker(ctx context.Context, tracker string) context.Context {
+	return tracking.WithTracker(ctx, tracker)
+}
+
+// NewTrackingGroup creates a request-scoped group collector.
+func NewTrackingGroup(options TrackingGroupOptions) (*TrackingGroup, error) {
+	return tracking.NewGroup(options)
+}
 
 // Root-package aliases keep common SDK types discoverable and preserve the
 // API that predates the domain package split.
@@ -34,6 +47,10 @@ type (
 	RepositoryListOptions         = repository.ListOptions
 	RepositoryUpdateCommitOptions = repository.UpdateCommitOptions
 	RepositoryService             = repository.Service
+
+	TrackingGroup        = tracking.Group
+	TrackingGroupOptions = tracking.GroupOptions
+	TrackingGroupResult  = tracking.GroupResult
 
 	SchemaService = schema.Service
 )

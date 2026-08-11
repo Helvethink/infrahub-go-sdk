@@ -6,11 +6,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/tracking"
 )
 
 type payload struct {
@@ -87,6 +89,24 @@ func TestListGetAndNotFound(t *testing.T) {
 	var notFound *api.NotFoundError
 	if !errors.As(err, &notFound) {
 		t.Fatalf("error = %T %v", err, err)
+	}
+}
+
+func TestQueryRecordsNodesInTrackingGroup(t *testing.T) {
+	t.Parallel()
+	service, server := newTestService(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"BuiltinTag":{"count":2,"edges":[{"node":{"id":"tag-b","kind":"BuiltinTag"}},{"node":{"id":"tag-a","kind":"BuiltinTag"}}]}}}`))
+	})
+	defer server.Close()
+	group, err := tracking.NewGroup(tracking.GroupOptions{Identifier: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.List(group.Context(context.Background()), "BuiltinTag", 0, 10, "main"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := group.Members(), []string{"tag-a", "tag-b"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Members() = %#v, want %#v", got, want)
 	}
 }
 
