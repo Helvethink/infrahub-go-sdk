@@ -39,7 +39,7 @@ func TestNewClientWiresServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if client.Branches == nil || client.Nodes == nil || client.Schema == nil {
+	if client.Branches == nil || client.Nodes == nil || client.Repositories == nil || client.Schema == nil {
 		t.Fatalf("services not initialized: %#v", client)
 	}
 }
