@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/Helvethink/infrahub-go-sdk/api"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
 
 // Status describes the lifecycle state of an Infrahub branch.

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/Helvethink/infrahub-go-sdk/api"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
 
 var kindPattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)

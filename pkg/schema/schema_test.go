@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Helvethink/infrahub-go-sdk/api"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
 
 func TestGraphQLUsesEncodedBranchQuery(t *testing.T) {

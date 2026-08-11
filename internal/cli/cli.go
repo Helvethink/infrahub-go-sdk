@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
-	sdkconfig "github.com/Helvethink/infrahub-go-sdk/config"
+	sdkconfig "github.com/Helvethink/infrahub-go-sdk/pkg/config"
 )
 
 // BuildInfo contains values normally injected through linker flags.
