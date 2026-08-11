@@ -1,4 +1,4 @@
-.PHONY: build check fmt fmt-check race test vet
+.PHONY: build check fmt fmt-check lint race test vet
 
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || true)
@@ -21,7 +21,10 @@ test:
 vet:
 	go vet ./...
 
+lint:
+	golangci-lint run ./...
+
 race:
 	go test -race ./...
 
-check: fmt-check vet test
+check: fmt-check vet lint test

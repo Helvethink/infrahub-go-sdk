@@ -1,6 +1,6 @@
 # Infrahub Go SDK
 
-An idiomatic, dependency-free Go client for [Infrahub](https://www.infrahub.app/), inspired by the official Python SDK.
+An idiomatic Go client and command-line tool for [Infrahub](https://www.infrahub.app/), inspired by the official Python SDK.
 
 > This project is an early port. It currently provides the transport foundation, arbitrary GraphQL execution, branch management, schema APIs, and dynamic node mutations. Specialized Python SDK features are tracked in the roadmap below.
 
@@ -33,7 +33,10 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `api`: low-level HTTP and GraphQL protocol
 - `branch`: branch lifecycle and types
 - `schema`: schema discovery, validation, and loading
+- `config`: strict TOML and environment configuration
 - `node`: generic operations for schema-defined objects
+- `cmd/infrahubctl`: executable entry point
+- `internal/cli`: testable, non-public CLI implementation
 
 Most applications should import only the root package. Domain packages are available when their types or constructors are needed directly.
 
@@ -44,9 +47,34 @@ See the [Python SDK porting map](docs/compatibility.md) for implemented and plan
 ```sh
 make check
 make race
+make build
 ```
 
-`make check` verifies formatting, runs `go vet`, and executes all unit and facade tests.
+`make check` verifies formatting, runs `go vet`, runs `golangci-lint`, and executes all unit and facade tests. This check is mandatory after adding a feature.
+
+## CLI
+
+Build the command with `make build`, or install it directly:
+
+```sh
+go install github.com/Helvethink/infrahub-go-sdk/cmd/infrahubctl@latest
+```
+
+Configuration uses flags or environment variables:
+
+```sh
+export INFRAHUB_ADDRESS=https://infrahub.example.com
+export INFRAHUB_API_TOKEN=...
+
+infrahubctl branch list
+infrahubctl branch create --description "SDK work" sdk-work
+infrahubctl schema graphql > schema.graphql
+printf 'query { Branch { name } }' | infrahubctl graphql
+```
+
+Run `infrahubctl help` for the complete initial command list.
+
+TOML configuration is also supported from the platform user configuration directory, `INFRAHUB_CONFIG`, or `-config`. See the [configuration guide](docs/configuration.md) for the file format and precedence rules.
 
 ## Dynamic GraphQL
 
