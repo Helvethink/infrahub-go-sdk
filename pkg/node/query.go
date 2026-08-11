@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Helvethink/infrahub-go-sdk/internal/requestcontext"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
 
@@ -55,6 +56,11 @@ func (s *Service) Query(ctx context.Context, kind string, options QueryOptions) 
 	page, err := s.queryPage(ctx, kind, request)
 	if page != nil {
 		page.Offset, page.Limit = options.Offset, options.Limit
+		ids := make([]string, 0, len(page.Nodes))
+		for _, item := range page.Nodes {
+			ids = append(ids, item.ID)
+		}
+		requestcontext.RecordNodeIDs(ctx, ids...)
 	}
 	return page, err
 }

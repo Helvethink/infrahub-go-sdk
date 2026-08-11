@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/Helvethink/infrahub-go-sdk/internal/requestcontext"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
 
@@ -137,6 +138,9 @@ func (s *Service) mutate(ctx context.Context, kind, action string, input map[str
 		Tracker: "mutation-node-" + action,
 	}, &data)
 	result := data[operation]
+	if result.Object != nil {
+		requestcontext.RecordNodeIDs(ctx, result.Object.ID)
+	}
 	if err != nil {
 		return result.Object, err
 	}
@@ -165,6 +169,7 @@ func (s *Service) getOne(ctx context.Context, kind, suffix, identifier, variable
 	if len(page.Nodes) == 0 {
 		return nil, &api.NotFoundError{Kind: kind, Identifier: identifier}
 	}
+	requestcontext.RecordNodeIDs(ctx, page.Nodes[0].ID)
 	return &page.Nodes[0], nil
 }
 
