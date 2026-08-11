@@ -1,0 +1,3 @@
+address = "https://infrahub.example.com"
+api_token = "replace-me"
+default_branch = "main"
