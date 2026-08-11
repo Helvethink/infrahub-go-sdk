@@ -18,7 +18,7 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | IP address/prefix allocation | Planned | resource-pool service |
 | batches | Planned | Go concurrency helper |
 | tasks | Planned | task service |
-| object/file store | Planned | object-store service |
+| object/file store | Available | `Client.ObjectStore` and `pkg/objectstore` |
 | tracking/group context | Available | `tracking.WithTracker`, `tracking.Group` |
 | repositories | Available | `Client.Repositories` and `pkg/repository` |
 | Jinja transforms/generators/checks | Not core | provide Go-native extension points |
