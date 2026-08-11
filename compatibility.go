@@ -9,6 +9,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/objectstore"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/repository"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/task"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/tracking"
 )
 
@@ -57,7 +58,29 @@ type (
 	TrackingGroupOptions = tracking.GroupOptions
 	TrackingGroupResult  = tracking.GroupResult
 
+	Task               = task.Task
+	TaskState          = task.State
+	TaskLog            = task.Log
+	TaskRelatedNode    = task.RelatedNode
+	TaskFilter         = task.Filter
+	TaskListOptions    = task.ListOptions
+	TaskPage           = task.Page
+	TaskService        = task.Service
+	TaskAmbiguousError = task.AmbiguousError
+
 	SchemaService = schema.Service
+)
+
+const (
+	TaskStateScheduled  = task.StateScheduled
+	TaskStatePending    = task.StatePending
+	TaskStateRunning    = task.StateRunning
+	TaskStateCompleted  = task.StateCompleted
+	TaskStateFailed     = task.StateFailed
+	TaskStateCancelled  = task.StateCancelled
+	TaskStateCrashed    = task.StateCrashed
+	TaskStatePaused     = task.StatePaused
+	TaskStateCancelling = task.StateCancelling
 )
 
 const (
