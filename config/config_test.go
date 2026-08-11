@@ -1,0 +1,44 @@
+package config_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/Helvethink/infrahub-go-sdk/config"
+)
+
+func TestDecode(t *testing.T) {
+	t.Parallel()
+	result, err := config.Decode(strings.NewReader(`
+address = "https://infrahub.example.com"
+api_token = "secret"
+default_branch = "develop"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Address != "https://infrahub.example.com" || result.APIToken != "secret" || result.DefaultBranch != "develop" {
+		t.Fatalf("config = %#v", result)
+	}
+}
+
+func TestDecodeRejectsUnknownFields(t *testing.T) {
+	t.Parallel()
+	if _, err := config.Decode(strings.NewReader(`adress = "typo"`)); err == nil {
+		t.Fatal("Decode() error = nil")
+	}
+}
+
+func TestEnvironmentOverridesFileValues(t *testing.T) {
+	t.Parallel()
+	values := map[string]string{
+		config.EnvAddress:       "https://environment.example.com",
+		config.EnvDefaultBranch: "environment",
+	}
+	result := (config.Config{
+		Address: "https://file.example.com", APIToken: "file-secret", DefaultBranch: "file",
+	}).ApplyEnvironment(func(name string) string { return values[name] })
+	if result.Address != values[config.EnvAddress] || result.DefaultBranch != "environment" || result.APIToken != "file-secret" {
+		t.Fatalf("config = %#v", result)
+	}
+}

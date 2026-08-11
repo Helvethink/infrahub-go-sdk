@@ -6,6 +6,7 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | --- | --- | --- |
 | `execute_graphql` | Available | `Client.Execute` |
 | API-token authentication | Available | `WithAPIToken` |
+| TOML and environment configuration | Available | `config` package and `infrahubctl` |
 | default/request branch and `at` | Available | `WithDefaultBranch`, `GraphQLRequest` |
 | branch manager | Available | `Client.Branches` |
 | schema fetch/load/check/SDL | Available | `Client.Schema` |
@@ -21,6 +22,6 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | tracking/group context | Planned | immutable request options |
 | repositories | Planned | repository service |
 | Jinja transforms/generators/checks | Not core | provide Go-native extension points |
-| `infrahubctl` | Not core | separate command if needed |
+| `infrahubctl` core commands | Available | `cmd/infrahubctl` |
 
 Compatibility means equivalent server behavior where practical. It does not imply identical names, mutable node objects, separate sync/async clients, Python decorators, or runtime code loading.

@@ -1,0 +1,51 @@
+version: "2"
+linters:
+  #enable-all: true
+  disable:
+    # We don't want these
+    - forcetypeassert
+    - gochecknoglobals
+    - godox
+    - ireturn
+    - nakedret
+    - testpackage
+    - varnamelen
+    - interfacebloat
+    - wsl
+
+    # TODO
+    - tagliatelle
+    - promlinter
+    - paralleltest
+    - gocognit
+    - gomoddirectives
+    - forbidigo
+    - goconst
+    - mnd
+    - lll
+    - dupl
+    - depguard
+    - tagalign
+
+  settings:
+    funlen:
+      lines: -1 # (disabled)
+      statements: 100
+
+    cyclop:
+      max-complexity: 20
+
+    lll:
+      line-length: 140
+
+    nestif:
+      min-complexity: 18
+
+  exclusions:
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - funlen
+          - goconst
+          - errcheck
+...
