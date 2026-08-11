@@ -4,6 +4,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/branch"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/repository"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
 )
 
@@ -27,6 +28,12 @@ type (
 	NodePage           = node.Page
 	NodeMutationResult = node.MutationResult
 	NodeService        = node.Service
+
+	Repository                    = repository.Repository
+	RepositoryBranchState         = repository.BranchState
+	RepositoryListOptions         = repository.ListOptions
+	RepositoryUpdateCommitOptions = repository.UpdateCommitOptions
+	RepositoryService             = repository.Service
 
 	SchemaService = schema.Service
 )

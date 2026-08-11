@@ -35,6 +35,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `pkg/schema`: schema discovery, validation, and loading
 - `pkg/config`: strict TOML and environment configuration
 - `pkg/node`: generic operations for schema-defined objects
+- `pkg/repository`: repository discovery and commit tracking
 - `cmd/infrahubctl`: executable entry point
 - `internal/cli`: testable, non-public CLI implementation
 
@@ -107,6 +108,16 @@ tag, err := client.Nodes.Create(ctx, "BuiltinTag", map[string]any{
 
 Dynamic filters and nested selections are available through `client.Nodes.Query`. See the [dynamic query guide](docs/dynamic-queries.md).
 
+## Repositories
+
+```go
+repositories, err := client.Repositories.List(ctx, infrahub.RepositoryListOptions{
+    Branches: []string{"main", "staging"},
+})
+```
+
+Repository discovery aggregates commits and internal status across branches. Commit updates are also supported. See the [repository guide](docs/repositories.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -114,5 +125,6 @@ Dynamic filters and nested selections are available through `client.Nodes.Query`
 - Schema fetch, SDL export, validation, and loading
 - Generic node create/update/delete
 - Generic node list/get-by-ID/get-by-HFID with offset pagination
+- Repository discovery across branches and protected commit updates
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.
