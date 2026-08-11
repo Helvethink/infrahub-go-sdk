@@ -36,6 +36,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `pkg/config`: strict TOML and environment configuration
 - `pkg/node`: generic operations for schema-defined objects
 - `pkg/repository`: repository discovery and commit tracking
+- `pkg/tracking`: request trackers and group collection
 - `cmd/infrahubctl`: executable entry point
 - `internal/cli`: testable, non-public CLI implementation
 
@@ -118,6 +119,18 @@ repositories, err := client.Repositories.List(ctx, infrahub.RepositoryListOption
 
 Repository discovery aggregates commits and internal status across branches. Commit updates are also supported. See the [repository guide](docs/repositories.md).
 
+## Tracking
+
+```go
+group, err := tracking.NewGroup(tracking.GroupOptions{Identifier: "inventory-import"})
+ctx = group.Context(tracking.WithTracker(ctx, "inventory-import"))
+
+_, err = client.Nodes.List(ctx, "BuiltinTag", 0, 100, "main")
+result, err := group.Save(ctx, client)
+```
+
+Tracking is request-scoped and safe for concurrent workflows. See the [tracking and group-context guide](docs/tracking.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -126,5 +139,6 @@ Repository discovery aggregates commits and internal status across branches. Com
 - Generic node create/update/delete
 - Generic node list/get-by-ID/get-by-HFID with offset pagination
 - Repository discovery across branches and protected commit updates
+- Request-scoped tracker overrides and concurrent tracking groups
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.
