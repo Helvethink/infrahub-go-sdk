@@ -39,6 +39,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `pkg/node`: generic operations for schema-defined objects
 - `pkg/objectstore`: stored objects and text-file retrieval
 - `pkg/repository`: repository discovery and commit tracking
+- `pkg/resourcepool`: IP address/prefix allocation and utilization
 - `pkg/tracking`: request trackers and group collection
 - `cmd/infrahubctl`: executable entry point
 - `internal/cli`: testable, non-public CLI implementation
@@ -168,6 +169,21 @@ results, err := batch.Map(ctx, nodeIDs, func(ctx context.Context, id string) (*i
 
 Batch results retain input indexes and support fail-fast or per-result error collection. See the [batches guide](docs/batches.md).
 
+## IP address and prefix pools
+
+```go
+prefixLength := 32
+address, err := client.ResourcePools.AllocateAddress(ctx, infrahub.ResourcePoolAddressOptions{
+    PoolID:       poolID,
+    Identifier:   "loopback-edge-01",
+    PrefixLength: &prefixLength,
+    AddressKind:  "IpamIPAddress",
+    Branch:       "main",
+})
+```
+
+Prefix allocation, allocation history and utilization are also supported. See the [resource-pool guide](docs/resource-pools.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -180,5 +196,6 @@ Batch results retain input indexes and support fail-fast or per-result error col
 - Stored object upload/download and text-file retrieval by storage ID, node ID, or HFID
 - Background-task filtering, pagination, lookup, counts, logs and polling
 - Generic bounded batches with cancellation and configurable error collection
+- IP address/prefix allocation, allocation history and pool utilization
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.

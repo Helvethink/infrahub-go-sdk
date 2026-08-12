@@ -8,6 +8,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/objectstore"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/repository"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/resourcepool"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/task"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/tracking"
@@ -54,6 +55,16 @@ type (
 	RepositoryUpdateCommitOptions = repository.UpdateCommitOptions
 	RepositoryService             = repository.Service
 
+	ResourcePoolAllocation        = resourcepool.Allocation
+	ResourcePoolAddressOptions    = resourcepool.AddressOptions
+	ResourcePoolPrefixOptions     = resourcepool.PrefixOptions
+	ResourcePoolAllocatedOptions  = resourcepool.AllocatedOptions
+	ResourcePoolAllocationPage    = resourcepool.AllocationPage
+	ResourcePoolUtilization       = resourcepool.Utilization
+	ResourcePoolUtilizationResult = resourcepool.UtilizationResult
+	ResourcePoolMemberType        = resourcepool.MemberType
+	ResourcePoolService           = resourcepool.Service
+
 	TrackingGroup        = tracking.Group
 	TrackingGroupOptions = tracking.GroupOptions
 	TrackingGroupResult  = tracking.GroupResult
@@ -69,6 +80,11 @@ type (
 	TaskAmbiguousError = task.AmbiguousError
 
 	SchemaService = schema.Service
+)
+
+const (
+	ResourcePoolMemberTypePrefix  = resourcepool.MemberTypePrefix
+	ResourcePoolMemberTypeAddress = resourcepool.MemberTypeAddress
 )
 
 const (
