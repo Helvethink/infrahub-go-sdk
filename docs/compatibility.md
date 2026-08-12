@@ -21,7 +21,7 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | object/file store | Available | `Client.ObjectStore` and `pkg/objectstore` |
 | tracking/group context | Available | `tracking.WithTracker`, `tracking.Group` |
 | repositories | Available | `Client.Repositories` and `pkg/repository` |
-| Jinja transforms/generators/checks | Not core | provide Go-native extension points |
+| Jinja transforms/generators/checks | Go-native | `Client.Automation` and `pkg/automation` extension points |
 | `infrahubctl` core commands | Available | `cmd/infrahubctl` |
 
 Compatibility means equivalent server behavior where practical. It does not imply identical names, mutable node objects, separate sync/async clients, Python decorators, or runtime code loading.

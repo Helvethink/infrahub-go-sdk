@@ -32,6 +32,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `infrahub`: client facade and configuration
 - `pkg/batch`: generic bounded concurrent execution
 - `pkg/api`: low-level HTTP and GraphQL protocol
+- `pkg/automation`: Go-native transforms, generators and checks
 - `pkg/branch`: branch lifecycle and types
 - `pkg/diff`: branch diff summaries and complete trees
 - `pkg/schema`: schema discovery, validation, and loading
@@ -208,6 +209,19 @@ paths, err := client.Traversal.Paths(ctx, infrahub.TraversalPathsOptions{
 
 Path existence, filters, point-in-time traversal and reachable-node discovery are supported on Infrahub 1.10+. See the [graph traversal guide](docs/graph-traversal.md).
 
+## Automation extensions
+
+```go
+result, err := client.Automation.RunCheck(ctx, infrahub.AutomationRunOptions{
+    Query: infrahub.AutomationQueryOptions{Name: "check_input", Branch: "main"},
+}, func(ctx context.Context, data map[string]any, report *infrahub.AutomationReporter) error {
+    report.Error("management address is missing", nodeID, "DcimDevice")
+    return nil
+})
+```
+
+Transforms, idempotent generators and structured checks are implemented as compiled Go extension points. See the [automation guide](docs/automation.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -223,5 +237,6 @@ Path existence, filters, point-in-time traversal and reachable-node discovery ar
 - IP address/prefix allocation, allocation history and pool utilization
 - Branch diff summaries and complete diff trees
 - Graph path traversal, connectivity checks and reachable-node discovery
+- Go-native transforms, tracked generators and structured checks
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.
