@@ -14,7 +14,7 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | identity-only `get`, `all`, pagination | Available | `GetByID`, `GetByHFID`, `List` |
 | dynamic attribute filters/selections | Available | `node.Service.Query` |
 | graph traversal | Planned | dedicated traversal service |
-| diff summary/tree | Planned | dedicated diff service |
+| diff summary/tree | Available | `Client.Diffs` and `pkg/diff` |
 | IP address/prefix allocation | Available | `Client.ResourcePools` and `pkg/resourcepool` |
 | batches | Available | `pkg/batch.Run` and `pkg/batch.Map` |
 | tasks | Available | `Client.Tasks` and `pkg/task` |

@@ -33,6 +33,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `pkg/batch`: generic bounded concurrent execution
 - `pkg/api`: low-level HTTP and GraphQL protocol
 - `pkg/branch`: branch lifecycle and types
+- `pkg/diff`: branch diff summaries and complete trees
 - `pkg/schema`: schema discovery, validation, and loading
 - `pkg/task`: background-task filtering and polling
 - `pkg/config`: strict TOML and environment configuration
@@ -184,6 +185,16 @@ address, err := client.ResourcePools.AllocateAddress(ctx, infrahub.ResourcePoolA
 
 Prefix allocation, allocation history and utilization are also supported. See the [resource-pool guide](docs/resource-pools.md).
 
+## Diffs
+
+```go
+tree, err := client.Diffs.Tree(ctx, infrahub.DiffOptions{
+    Branch: "feature/inventory",
+})
+```
+
+Node summaries, complete metadata, time ranges, attributes, relationships and peer changes are supported. See the [diff guide](docs/diffs.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -197,5 +208,6 @@ Prefix allocation, allocation history and utilization are also supported. See th
 - Background-task filtering, pagination, lookup, counts, logs and polling
 - Generic bounded batches with cancellation and configurable error collection
 - IP address/prefix allocation, allocation history and pool utilization
+- Branch diff summaries and complete diff trees
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.
