@@ -13,7 +13,7 @@ import (
 
 var kindPattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
 
-const identityFields = `id kind hfid display_label`
+const identityFields = `id kind: __typename hfid display_label`
 
 // Node identifies an Infrahub object while preserving its dynamic fields.
 type Node struct {

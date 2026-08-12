@@ -154,7 +154,7 @@ func (g *Group) Save(ctx context.Context, client Executor) (*GroupResult, error)
 		Object *GroupResult `json:"object"`
 	}
 	err := client.Execute(ctx, api.GraphQLRequest{
-		Query:     `mutation ` + operation + `($data: ` + operation + `Input!) { ` + operation + `(data: $data) { ok object { id kind display_label } } }`,
+		Query:     `mutation ` + operation + `($data: ` + operation + `Input!) { ` + operation + `(data: $data) { ok object { id kind: __typename display_label } } }`,
 		Variables: map[string]any{"data": data}, OperationName: operation, Branch: g.branch,
 		Tracker: "mutation-tracking-group-upsert",
 	}, &response)

@@ -119,6 +119,26 @@ func TestRejectsGraphQLInjectionInKind(t *testing.T) {
 	}
 }
 
+func TestIdentityKindUsesTypenameAlias(t *testing.T) {
+	t.Parallel()
+	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		var request payload
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		if !strings.Contains(request.Query, "kind: __typename") {
+			t.Errorf("query = %s", request.Query)
+		}
+		_, _ = w.Write([]byte(`{"data":{"CoreGraphQLQuery":{"count":1,"edges":[{"node":{"id":"query-id","kind":"CoreGraphQLQuery","hfid":["query"],"display_label":"query"}}]}}}`))
+	})
+	defer server.Close()
+	page, err := service.List(context.Background(), "CoreGraphQLQuery", 0, 1, "main")
+	if err != nil || len(page.Nodes) != 1 || page.Nodes[0].Kind != "CoreGraphQLQuery" {
+		t.Fatalf("List() = %#v, %v", page, err)
+	}
+}
+
 func TestQueryDynamicFiltersAndSelections(t *testing.T) {
 	t.Parallel()
 	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {

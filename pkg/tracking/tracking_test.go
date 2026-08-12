@@ -57,6 +57,9 @@ func TestSaveUsesVariablesAndUpsertsGroup(t *testing.T) {
 		if request.OperationName != "CoreStandardGroupUpsert" || request.Branch != "feature/groups" {
 			t.Fatalf("request = %#v", request)
 		}
+		if !strings.Contains(request.Query, "kind: __typename") {
+			t.Fatalf("tracking group kind must use a __typename alias: %s", request.Query)
+		}
 		if strings.Contains(request.Query, "node-a") || !strings.Contains(request.Query, "$data: CoreStandardGroupUpsertInput!") {
 			t.Fatalf("query = %s", request.Query)
 		}
