@@ -10,6 +10,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/objectstore"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/repository"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/resourcepool"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/task"
 )
@@ -19,12 +20,13 @@ import (
 type Client struct {
 	protocol *api.Client
 
-	Branches     *branch.Service
-	Schema       *schema.Service
-	Nodes        *node.Service
-	Repositories *repository.Service
-	ObjectStore  *objectstore.Service
-	Tasks        *task.Service
+	Branches      *branch.Service
+	Schema        *schema.Service
+	Nodes         *node.Service
+	Repositories  *repository.Service
+	ResourcePools *resourcepool.Service
+	ObjectStore   *objectstore.Service
+	Tasks         *task.Service
 }
 
 // NewClient creates an Infrahub client for address.
@@ -56,6 +58,7 @@ func NewClient(address string, options ...Option) (*Client, error) {
 	client.Schema = schema.NewService(protocol)
 	client.Nodes = node.NewService(protocol)
 	client.Repositories = repository.NewService(protocol)
+	client.ResourcePools = resourcepool.NewService(protocol)
 	client.ObjectStore = objectstore.NewService(protocol)
 	client.Tasks = task.NewService(protocol)
 	return client, nil
