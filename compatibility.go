@@ -5,6 +5,7 @@ import (
 
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/branch"
+	diffservice "github.com/Helvethink/infrahub-go-sdk/pkg/diff"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/objectstore"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/repository"
@@ -39,6 +40,16 @@ type (
 	BranchStatus        = branch.Status
 	BranchCreateOptions = branch.CreateOptions
 	BranchService       = branch.Service
+
+	DiffAction      = diffservice.Action
+	DiffElementType = diffservice.ElementType
+	DiffCounts      = diffservice.Counts
+	DiffPeer        = diffservice.Peer
+	DiffElement     = diffservice.Element
+	DiffNode        = diffservice.Node
+	DiffTree        = diffservice.Tree
+	DiffOptions     = diffservice.Options
+	DiffService     = diffservice.Service
 
 	Node               = node.Node
 	NodePage           = node.Page
@@ -80,6 +91,20 @@ type (
 	TaskAmbiguousError = task.AmbiguousError
 
 	SchemaService = schema.Service
+)
+
+const (
+	DiffActionAdded     = diffservice.ActionAdded
+	DiffActionUpdated   = diffservice.ActionUpdated
+	DiffActionRemoved   = diffservice.ActionRemoved
+	DiffActionUnchanged = diffservice.ActionUnchanged
+	DiffActionConflict  = diffservice.ActionConflict
+)
+
+const (
+	DiffElementTypeAttribute        = diffservice.ElementTypeAttribute
+	DiffElementTypeRelationshipOne  = diffservice.ElementTypeRelationshipOne
+	DiffElementTypeRelationshipMany = diffservice.ElementTypeRelationshipMany
 )
 
 const (
