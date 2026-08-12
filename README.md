@@ -36,6 +36,7 @@ All network operations accept `context.Context`. A client is safe for concurrent
 - `pkg/diff`: branch diff summaries and complete trees
 - `pkg/schema`: schema discovery, validation, and loading
 - `pkg/task`: background-task filtering and polling
+- `pkg/traversal`: graph paths and reachable nodes
 - `pkg/config`: strict TOML and environment configuration
 - `pkg/node`: generic operations for schema-defined objects
 - `pkg/objectstore`: stored objects and text-file retrieval
@@ -195,6 +196,18 @@ tree, err := client.Diffs.Tree(ctx, infrahub.DiffOptions{
 
 Node summaries, complete metadata, time ranges, attributes, relationships and peer changes are supported. See the [diff guide](docs/diffs.md).
 
+## Graph traversal
+
+```go
+paths, err := client.Traversal.Paths(ctx, infrahub.TraversalPathsOptions{
+    SourceID:      sourceID,
+    DestinationID: destinationID,
+    Branch:        "main",
+})
+```
+
+Path existence, filters, point-in-time traversal and reachable-node discovery are supported on Infrahub 1.10+. See the [graph traversal guide](docs/graph-traversal.md).
+
 ## Current scope
 
 - GraphQL transport, authentication, trackers, branch/time routing, and partial errors
@@ -209,5 +222,6 @@ Node summaries, complete metadata, time ranges, attributes, relationships and pe
 - Generic bounded batches with cancellation and configurable error collection
 - IP address/prefix allocation, allocation history and pool utilization
 - Branch diff summaries and complete diff trees
+- Graph path traversal, connectivity checks and reachable-node discovery
 
 Planned ports include schema-aware custom-field query construction, graph traversal, diffs, IP resource allocation, object/file storage, tasks, batches, and tracking. Python-only runtime features such as Jinja transforms and pytest plugins will not be copied into the core Go library.

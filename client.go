@@ -14,6 +14,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/resourcepool"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/task"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/traversal"
 )
 
 // Client is the high-level Infrahub client. It is safe for concurrent use.
@@ -29,6 +30,7 @@ type Client struct {
 	ResourcePools *resourcepool.Service
 	ObjectStore   *objectstore.Service
 	Tasks         *task.Service
+	Traversal     *traversal.Service
 }
 
 // NewClient creates an Infrahub client for address.
@@ -64,6 +66,7 @@ func NewClient(address string, options ...Option) (*Client, error) {
 	client.ResourcePools = resourcepool.NewService(protocol)
 	client.ObjectStore = objectstore.NewService(protocol)
 	client.Tasks = task.NewService(protocol)
+	client.Traversal = traversal.NewService(protocol)
 	return client, nil
 }
 
