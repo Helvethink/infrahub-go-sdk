@@ -13,6 +13,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/task"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/tracking"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/traversal"
 )
 
 // WithTracker returns a child context carrying a request tracker override.
@@ -79,6 +80,18 @@ type (
 	TrackingGroup        = tracking.Group
 	TrackingGroupOptions = tracking.GroupOptions
 	TrackingGroupResult  = tracking.GroupResult
+
+	TraversalNode             = traversal.Node
+	TraversalRelationship     = traversal.Relationship
+	TraversalHop              = traversal.Hop
+	TraversalPath             = traversal.Path
+	TraversalPathsResult      = traversal.PathsResult
+	TraversalPathsOptions     = traversal.PathsOptions
+	TraversalReachableNode    = traversal.ReachableNode
+	TraversalReachableResult  = traversal.ReachableResult
+	TraversalReachableOptions = traversal.ReachableOptions
+	TraversalUnsupportedError = traversal.UnsupportedError
+	TraversalService          = traversal.Service
 
 	Task               = task.Task
 	TaskState          = task.State
