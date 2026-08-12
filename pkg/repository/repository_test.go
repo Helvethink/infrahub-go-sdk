@@ -34,6 +34,9 @@ func TestListDiscoversPaginatesAndAggregatesRepositories(t *testing.T) {
 		case "RepositoryBranches":
 			return decodeInto(dst, `{"Branch":[{"name":"main"},{"name":"staging"},{"name":"main"}]}`)
 		case "ListCoreGenericRepository":
+			if !strings.Contains(request.Query, "kind: __typename") || !strings.Contains(request.Query, "... on CoreReadOnlyRepository") {
+				t.Errorf("query = %s", request.Query)
+			}
 			branch := request.Branch
 			commit, status := branch+"-sha", "active"
 			if branch == "staging" {

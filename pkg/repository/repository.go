@@ -194,6 +194,15 @@ type branchResult struct {
 
 func (s *Service) listBranch(ctx context.Context, kind, branch string) ([]branchRepository, error) {
 	operation := "List" + kind
+	fields := `id kind: __typename name { value } location { value } internal_status { value }`
+	switch kind {
+	case "CoreGenericRepository":
+		fields += ` ... on CoreRepository { commit { value } } ... on CoreReadOnlyRepository { commit { value } ref { value } }`
+	case "CoreRepository":
+		fields += ` commit { value }`
+	case "CoreReadOnlyRepository":
+		fields += ` commit { value } ref { value }`
+	}
 	all := make([]branchRepository, 0)
 	for offset := 0; ; offset += pageSize {
 		var response map[string]struct {
@@ -203,7 +212,7 @@ func (s *Service) listBranch(ctx context.Context, kind, branch string) ([]branch
 			} `json:"edges"`
 		}
 		err := s.client.Execute(ctx, api.GraphQLRequest{
-			Query:     `query ` + operation + `($offset: Int!, $limit: Int!) { ` + kind + `(offset: $offset, limit: $limit) { count edges { node { id kind name { value } location { value } commit { value } ref { value } internal_status { value } } } } }`,
+			Query:     `query ` + operation + `($offset: Int!, $limit: Int!) { ` + kind + `(offset: $offset, limit: $limit) { count edges { node { ` + fields + ` } } } }`,
 			Variables: map[string]any{"offset": offset, "limit": pageSize}, OperationName: operation, Branch: branch,
 		}, &response)
 		page := response[kind]

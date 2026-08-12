@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/automation"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/branch"
 	diffservice "github.com/Helvethink/infrahub-go-sdk/pkg/diff"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
@@ -36,6 +37,17 @@ type (
 	GraphQLErrorLocation = api.GraphQLErrorLocation
 	OperationError       = api.OperationError
 	NotFoundError        = api.NotFoundError
+
+	AutomationQueryOptions = automation.QueryOptions
+	AutomationRunOptions   = automation.RunOptions
+	AutomationTransform    = automation.Transform
+	AutomationGenerator    = automation.Generator
+	AutomationCheck        = automation.Check
+	AutomationSeverity     = automation.Severity
+	AutomationFinding      = automation.Finding
+	AutomationReporter     = automation.Reporter
+	AutomationCheckResult  = automation.CheckResult
+	AutomationService      = automation.Service
 
 	Branch              = branch.Branch
 	BranchStatus        = branch.Status
@@ -104,6 +116,12 @@ type (
 	TaskAmbiguousError = task.AmbiguousError
 
 	SchemaService = schema.Service
+)
+
+const (
+	AutomationSeverityInfo    = automation.SeverityInfo
+	AutomationSeverityWarning = automation.SeverityWarning
+	AutomationSeverityError   = automation.SeverityError
 )
 
 const (

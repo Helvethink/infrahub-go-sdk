@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/automation"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/branch"
 	diffservice "github.com/Helvethink/infrahub-go-sdk/pkg/diff"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
@@ -23,6 +24,7 @@ type Client struct {
 	protocol *api.Client
 
 	Branches      *branch.Service
+	Automation    *automation.Service
 	Diffs         *diffservice.Service
 	Schema        *schema.Service
 	Nodes         *node.Service
@@ -59,6 +61,7 @@ func NewClient(address string, options ...Option) (*Client, error) {
 	}
 	client := &Client{protocol: protocol}
 	client.Branches = branch.NewService(protocol)
+	client.Automation = automation.NewService(protocol)
 	client.Diffs = diffservice.NewService(protocol)
 	client.Schema = schema.NewService(protocol)
 	client.Nodes = node.NewService(protocol)

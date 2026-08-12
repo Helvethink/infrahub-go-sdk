@@ -113,7 +113,7 @@ func buildQuery(kind string, options QueryOptions) (api.GraphQLRequest, error) {
 }
 
 func renderSelections(selections []Selection) (string, error) {
-	result := []string{"id", "kind", "hfid", "display_label"}
+	result := []string{"id", "kind: __typename", "hfid", "display_label"}
 	identity := map[string]struct{}{"id": {}, "kind": {}, "hfid": {}, "display_label": {}}
 	seen := map[string]struct{}{"id": {}, "kind": {}, "hfid": {}, "display_label": {}}
 	for _, selection := range selections {
