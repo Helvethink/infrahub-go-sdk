@@ -13,11 +13,12 @@ func TestDecode(t *testing.T) {
 address = "https://infrahub.example.com"
 api_token = "secret"
 default_branch = "develop"
+log_level = "info"
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Address != "https://infrahub.example.com" || result.APIToken != "secret" || result.DefaultBranch != "develop" {
+	if result.Address != "https://infrahub.example.com" || result.APIToken != "secret" || result.DefaultBranch != "develop" || result.LogLevel != "info" {
 		t.Fatalf("config = %#v", result)
 	}
 }
@@ -34,11 +35,12 @@ func TestEnvironmentOverridesFileValues(t *testing.T) {
 	values := map[string]string{
 		config.EnvAddress:       "https://environment.example.com",
 		config.EnvDefaultBranch: "environment",
+		config.EnvLogLevel:      "debug",
 	}
 	result := (config.Config{
 		Address: "https://file.example.com", APIToken: "file-secret", DefaultBranch: "file",
 	}).ApplyEnvironment(func(name string) string { return values[name] })
-	if result.Address != values[config.EnvAddress] || result.DefaultBranch != "environment" || result.APIToken != "file-secret" {
+	if result.Address != values[config.EnvAddress] || result.DefaultBranch != "environment" || result.APIToken != "file-secret" || result.LogLevel != "debug" {
 		t.Fatalf("config = %#v", result)
 	}
 }

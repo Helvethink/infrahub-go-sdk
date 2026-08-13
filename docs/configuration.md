@@ -14,6 +14,7 @@ The default path is the operating system's user configuration directory followed
 address = "https://infrahub.example.com"
 api_token = "replace-me"
 default_branch = "main"
+log_level = "error"
 ```
 
 For migration from the Python `infrahubctl`, `server_address` is accepted as an alias for `address`.
@@ -37,6 +38,7 @@ export INFRAHUB_ADDRESS=https://infrahub.example.com
 export INFRAHUB_API_TOKEN=replace-me
 export INFRAHUB_BRANCH=main
 export INFRAHUB_DEFAULT_BRANCH=main
+export INFRAHUB_LOG_LEVEL=error
 ```
 
 Environment variables override values from TOML. Explicit CLI flags override both:
@@ -46,6 +48,16 @@ flags > environment > TOML > defaults
 ```
 
 Prefer the environment or a protected TOML file for the token; command-line token flags can be visible in process listings and shell history.
+
+## Logging
+
+The CLI writes command results to stdout and zap diagnostics to stderr as JSON. The default level is `error`; use `debug`, `info`, `warn`, `error`, or `off` through `--log-level`, `INFRAHUB_LOG_LEVEL`, or `log_level` in TOML. For example:
+
+```sh
+infrahubctl --log-level info branch list
+```
+
+Log events contain the command name, exit code, duration, and safe error details. Command arguments, GraphQL variables, API tokens, and authorization headers are not logged. With `off`, operational errors remain available as plain stderr diagnostics.
 
 ## Go applications
 
@@ -65,4 +77,4 @@ Applications that do not need file-based configuration can continue using `infra
 
 ## Implementation dependency
 
-Configuration loading uses Viper because the Go standard library does not parse TOML and Viper provides an extensible configuration boundary for the CLI. Each load uses an isolated Viper instance; package-global Viper state is not used. Cobra supplies the nested command tree and pflag supplies repeatable and interspersed flags. The dependencies are pinned in `go.mod`; Viper uses the MIT license and Cobra uses Apache-2.0. Their additional transitive cost is accepted for the command configuration and parsing layer.
+Configuration loading uses Viper because the Go standard library does not parse TOML and Viper provides an extensible configuration boundary for the CLI. Each load uses an isolated Viper instance; package-global Viper state is not used. Cobra supplies the nested command tree, pflag supplies repeatable and interspersed flags, and zap supplies structured logging. The dependencies are pinned in `go.mod`; Viper and zap use the MIT license and Cobra uses Apache-2.0. Their additional transitive cost is accepted for the command configuration, parsing, and logging layer.

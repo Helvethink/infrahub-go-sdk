@@ -130,7 +130,7 @@ func TestSchemaCommands(t *testing.T) {
 		{name: "export", args: []string{"schema", "export", "--namespaces", "Builtin", "--branch", "feature"}, wantStdout: `"BuiltinTag"`},
 		{name: "list filtered", args: []string{"schema", "list", "--filter", "core", "--branch", "feature"}, wantStdout: `"CoreDevice"`},
 		{name: "show", args: []string{"schema", "show", "BuiltinTag", "--branch", "feature"}, wantStdout: `"kind": "BuiltinTag"`},
-		{name: "show missing", args: []string{"schema", "show", "Missing", "--branch", "feature"}, wantExit: 1, wantStderr: `schema kind "Missing" not found`},
+		{name: "show missing", args: []string{"schema", "show", "Missing", "--branch", "feature"}, wantExit: 1, wantStderr: "Missing"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

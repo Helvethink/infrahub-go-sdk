@@ -96,6 +96,8 @@ printf 'query { Branch { name } }' | infrahubctl graphql
 
 Run `infrahubctl help` for the complete command list.
 
+Structured zap logs are written to stderr and never mixed with JSON results on stdout. Set `--log-level info` or `INFRAHUB_LOG_LEVEL=info` to log command lifecycle events; the default level is `error`.
+
 TOML configuration is also supported from the platform user configuration directory, `INFRAHUB_CONFIG`, `INFRAHUBCTL_CONFIG`, or `-config`. See the [configuration guide](docs/configuration.md) for the file format and precedence rules.
 
 ## Dynamic GraphQL
