@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -58,6 +59,73 @@ func TestDumpSchemaHelpers(t *testing.T) {
 	selections, err := dumpSelections(schema, "InfraDevice")
 	if err != nil || len(selections) != 1 || selections[0].Name != "name" {
 		t.Fatalf("selections=%#v err=%v", selections, err)
+	}
+}
+
+func TestLoadCreatesMissingDumpNodeAndNormalizesRelationships(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	record := dumpRecord{
+		ID:   "node-id",
+		Kind: "BuiltinTag",
+		GraphQLJSON: `{"id":"node-id","kind":"BuiltinTag","hfid":["tag"],"display_label":"tag",` +
+			`"name":{"value":"tag"},"groups":{"edges":[{"node":{"id":"group-id","kind":"CoreGroup"}}]}}`,
+	}
+	nodes, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "nodes.json"), append(nodes, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "relationships.json"), []byte("[]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		payload := decodeCLIRequest(t, request)
+		requests++
+		switch payload.OperationName {
+		case "GetBuiltinTagByID":
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTag":{"count":0,"edges":[]}}}`))
+		case "GetBuiltinTagByHFID":
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTag":{"count":0,"edges":[]}}}`))
+		case "BuiltinTagCreate":
+			data, _ := payload.Variables["data"].(map[string]any)
+			if data["id"] != nil || data["hfid"] != nil || data["display_label"] != nil || data["groups"] != nil {
+				t.Errorf("create data = %#v", data)
+			}
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTagCreate":{"ok":true,"object":{"id":"new-node-id","kind":"BuiltinTag","hfid":["tag"],"display_label":"tag"}}}}`))
+		case "BuiltinTagUpsert":
+			data, _ := payload.Variables["data"].(map[string]any)
+			if data["id"] != "new-node-id" {
+				t.Errorf("upsert data = %#v", data)
+			}
+			groups, _ := data["groups"].([]any)
+			if len(groups) != 1 || groups[0].(map[string]any)["id"] != "group-id" {
+				t.Errorf("groups = %#v", data["groups"])
+			}
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTagUpsert":{"ok":true,"object":{"id":"new-node-id","kind":"BuiltinTag","hfid":["tag"],"display_label":"tag"}}}}`))
+		default:
+			t.Errorf("unexpected operation %q", payload.OperationName)
+		}
+	}))
+	defer server.Close()
+	var stdout, stderr bytes.Buffer
+	code := testRunner(&stdout, &stderr).Run(context.Background(), []string{
+		"-address", server.URL, "load", "--directory", directory,
+	})
+	if code != 0 || requests != 4 || !strings.Contains(stdout.String(), `"loaded": 1`) {
+		t.Fatalf("code=%d requests=%d stdout=%q stderr=%q", code, requests, stdout.String(), stderr.String())
+	}
+}
+
+func TestRemapRelatedNodeIDs(t *testing.T) {
+	t.Parallel()
+	input := []map[string]any{{"id": "old-id"}, {"id": "external-id"}}
+	result, ok := remapRelatedNodeIDs(input, map[string]string{"old-id": "new-id"}).([]map[string]any)
+	if !ok || !reflect.DeepEqual(result, []map[string]any{{"id": "new-id"}, {"id": "external-id"}}) {
+		t.Fatalf("result = %#v", result)
 	}
 }
 
