@@ -1,6 +1,6 @@
 # Infrahub Go SDK
 
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/Helvethink/infrahub-go-sdk](https://pkg.go.dev/mod/github.com/Helvethink/infrahub-go-sdk)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/Helvethink/infrahub-go-sdk)](https://pkg.go.dev/mod/github.com/Helvethink/infrahub-go-sdk)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Helvethink/infrahub-go-sdk)](https://goreportcard.com/report/github.com/Helvethink/infrahub-go-sdk)
 [![Docker Pulls](https://badgen.net/docker/pulls/helvethink/infrahub-go-sdk?icon=docker&label=pulls)](https://hub.docker.com/r/helvethink/infrahub-go-sdk/)
 [![Docker Stars](https://badgen.net/docker/stars/helvethink/infrahub-go-sdk?icon=docker&label=stars)](https://hub.docker.com/r/helvethink/infrahub-go-sdk/)
