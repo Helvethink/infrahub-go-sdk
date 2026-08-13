@@ -1,51 +1,219 @@
+# Comments started with [!] are explanations of my workflow with golangci-lint.
+# Another comments are real comments in my config.
+
+# [!] Examine the https://golangci-lint.run/docs/configuration/file/ to know all possibilities.
+
 version: "2"
+
+run:
+  go: "1.26"
+  build-tags:
+    - integration # [!] If you disable code for integration tests to run all unit tests, enable it to lint all the same.
+  modules-download-mode: vendor # [!] if you are using vendoring
+
+# [!] Linters are enabled manually. Disabled linters are commented and have comment about reason of disabling.
+# [!] Linters disabled inside source code by //nolint should be specific and comments like this
+# [!] //nolint:gocyclo // This legacy function is complex but the team too busy to simplify it.
+# [!] (see also nolintlint settings).
+#
+# [!] During update version of golangci-lint do the following:
+# [!] - add new linters to enable-list
+# [!] - enable previously disabled linters if needed
+# [!] - configure (see below) or disable new linters to be appropriate for your project
 linters:
-  #enable-all: true
-  disable:
-    # We don't want these
-    - forcetypeassert
-    - gochecknoglobals
-    - godox
-    - ireturn
-    - nakedret
-    - testpackage
-    - varnamelen
-    - interfacebloat
-    - wsl
-
-    # TODO
-    - tagliatelle
-    - promlinter
-    - paralleltest
-    - gocognit
-    - gomoddirectives
+  default: none
+  enable:
+    - gomodguard_v2
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - contextcheck
+    # - cyclop
+    # Measuring code complexity is hard. Cyclomatic complexity is doubtfully
+    # a reliable metric for this purpose. Some problems are complex by nature
+    # and therefore more cyclomatically complex code might actually be
+    # simpler.
+    # - depguard # Package dependencies are governed by AGENTS.md; the default policy rejects all imports.
+    - dogsled
+    # - dupl # Similar GraphQL service methods intentionally retain explicit request and response handling.
+    - durationcheck
+    # - err113 # Validation errors include caller-facing context and are not all useful as sentinels.
+    - errcheck
+    - errname
+    - errorlint
+    - exhaustive
+    # - exhaustruct
+    # We frequently make use of zero-values and partial initialization.
     - forbidigo
-    - goconst
-    - mnd
-    - lll
-    - dupl
-    - depguard
-    - tagalign
+    - forcetypeassert
+    # - funlen # Command dispatch and schema transformations are clearer when kept as cohesive workflows.
+    # - gochecknoglobals # Build metadata and immutable lookup tables are intentional package state.
+    - gochecknoinits
+    # - gocognit # Schema-driven command workflows are inherently branching.
+    # - goconst # Repeated protocol field names are clearer at their individual use sites.
+    - gocritic
+    # - gocyclo # Schema-driven command workflows are inherently branching.
+    - godot
+    # - godox
+    # TODOs and FIXMEs function as a big warning sign: "Beware! This code has
+    # bugs and other problems. Be careful not to make things worse when
+    # editing. Or better fix the issues before implementing a new feature on
+    # top.". The idea of [`godox` comment
+    # extractor](https://github.com/766b/godox) seems to be different from
+    # the idea of [`godox` linter](https://github.com/matoous/godox). The
+    # first one lets you quickly browse through the code problems, while the
+    # second one asks you to remove that big warning sign in favor of tasks.
+    # Though tasks are great, they will not help you while editing.
+    - goheader
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - govet
+    - importas
+    # - ireturn # See: https://github.com/go-proverbs/go-proverbs.github.io/issues/37.
+    - ineffassign
+    # - lll # GraphQL documents and structured literals are more readable when kept intact.
+    - makezero
+    - misspell
+    # - mnd # Protocol limits, file modes, and CLI exit codes are meaningful at their use sites.
+    - nakedret
+    # - nestif # Nested schema traversal mirrors the input document structure.
+    # - nilnil # A nil result with no error is an intentional optional lookup result.
+    - nilerr
+    # - nlreturn # Too subjective.
+    - noctx
+    - nolintlint
+    # - paralleltest # HTTP tests frequently share servers and synchronized state.
+    - prealloc
+    - promlinter
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    # - tagliatelle # JSON tags follow external Infrahub and GraphQL wire contracts.
+    # - testpackage # Same-package tests exercise meaningful internal invariants.
+    - thelper
+    # - tparallel # HTTP subtests frequently share servers and synchronized state.
+    - unconvert
+    - unparam
+    # - varnamelen
+    # Though the idea is idiomatic, the length is not the only thing that
+    # determines whether a variable is "easy to use".
+    - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+    # - wrapcheck # Is prone to bad suggestions (especially see issue #1).
+    # - wsl_v5 # Not sure that suggestions are always good.
 
+  # [!] Linters has a lot of settings and can be flexible configured.
   settings:
-    funlen:
-      lines: -1 # (disabled)
-      statements: 100
-
-    cyclop:
-      max-complexity: 20
-
     lll:
-      line-length: 140
+      line-length: 110
+    forbidigo: # [!] Useful to check some code writing rules. E.g. this config contains example of using own logger instead of global zap.
+      forbid:
+        - pattern: os\.Exit # it's not safe to exit in random places, because defer will not work.
+        - pattern: log\.Fatal.* # it calls os.Exit (see above)
+        # - pattern: c.viper # forbid it after full migrate to new declarative configs (see PLFM-616).
+    nilnil:
+      checked-types: # [!] choose only types relative to your code base or disable this linter.
+        - ptr
+        - func
+        - iface
+    nolintlint:
+      require-explanation: true # [!] it forces you to write explanation of //nolint comments.
+      require-specific: true
+    tagliatelle: # [!] configure it accordingly to your project rules.
+      case:
+        use-field-name: false
+        rules:
+          json: snake
+          yaml: snake
 
-    nestif:
-      min-complexity: 18
-
+  # [!] Extremely useful section to disable some linters for specific files or patterns.
   exclusions:
+    generated: lax # [!] Exclude generated code with specific lines like 'autogenerated code'
+    warn-unused: true # [!] To keep exclusions clean
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - <generated files or dirs to exclude>
     rules:
-      - path: '(.+)_test\.go'
+      - path: (_test\.go|apitest)
         linters:
-          - funlen
+          - forcetypeassert # it's ok to have some type risks in tests
+          - gosec # security is not make sense in tests
+          - noctx # it's ok to do simple http request without context in tests
+
+      - path: (.+)_test\.go
+        linters:
           - goconst
-          - errcheck
-...
+
+      # Exclude lll issues for long lines with go:generate
+      - linters:
+          - lll
+        source: "^//go:generate "
+
+      # They are using same environment
+      - path: tests/integration
+        linters:
+          - paralleltest
+
+      # Init and New functions is a glue for service. They can be long, but simple.
+      - linters:
+          - funlen
+        path: service\.go
+        source: "Init|New"
+
+      # We allow to use zap only in log package.
+      - path: internal/log
+        linters:
+          - forbidigo
+        text: "use of .* forbidden by pattern `zap`"
+
+      # We allow to log.Fatal in main, tests, scripts and generators.
+      - path: main.go|main_test.go|tests|scripts|internal/blueprint/generator/generator.go|build/dockergen.go
+        linters:
+          - forbidigo
+        text: "forbidden by pattern `log..Fatal.*`"
+
+      # We allow to os.Exit in main, tests, scripts and generators.
+      - path: main.go|main_test.go|tests|scripts|internal/blueprint/generator/generator.go|build/dockergen.go
+        linters:
+          - forbidigo
+        text: "forbidden by pattern `os..Exit`"
+
+      # We have a lot of nil-tolerant types here.
+      - path: <package with a lot of nil-tolerant types>
+        linters:
+          - nilnil
+
+      # Should be fixed after full migration to generated config PLFM-616.
+      - path: config.go
+        linters:
+          - unparam
+        text: "newConfig - result 1 \\(error\\) is always nil"
+
+# [!] Formatters should be configured as strict as possible to fix your project codestyle.
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(<your go module>)
+  exclusions:
+    generated: lax # [!] Exclude generated code with specific lines like 'autogenerated code'
+    warn-unused: true # [!] To keep exclusions clean
+    paths:
+      - <generated files or dirs to exclude>
