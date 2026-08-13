@@ -7,7 +7,7 @@
 [![test](https://github.com/Helvethink/infrahub-go-sdk/actions/workflows/go-test.yml/badge.svg)](https://github.com/Helvethink/infrahub-go-sdk/actions/workflows/go-tests.yml)
 [![Coverage Status](https://coveralls.io/repos/github/Helvethink/infrahub-go-sdk/badge.svg?branch=main)](https://coveralls.io/github/Helvethink/infrahub-go-sdk?branch=main)
 [![release](https://github.com/Helvethink/infrahub-go-sdk/actions/workflows/release.yml/badge.svg)](https://github.com/Helvethink/infrahub-go-sdk/actions/workflows/release.yml)
-[![License](https://img.shields.io/badge/License-MIT%202.0-blue.svg)](https://coveralls.io/github/Helvethink/infrahub-go-sdk/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://coveralls.io/github/Helvethink/infrahub-go-sdk/blob/main/LICENSE)
 
 An idiomatic Go client and command-line tool for [Infrahub](https://www.infrahub.app/), inspired by the official Python SDK.
 
