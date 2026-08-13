@@ -12,7 +12,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const offlineCommand = "offline"
+const (
+	offlineCommand        = "offline"
+	optionalClientCommand = "optional-client"
+)
 
 type commandState struct {
 	runner Runner
@@ -69,6 +72,13 @@ func newRootCommand(ctx context.Context, runner Runner) *cobra.Command {
 		state.schemaCommand(),
 		state.taskCommand(),
 		state.graphQLCommand(),
+		state.dumpCommand(),
+		state.loadCommand(),
+		state.menuCommand(),
+		state.marketplaceCommand(),
+		state.protocolsCommand(),
+		state.telemetryCommand(),
+		state.validateCommand(),
 	)
 	return root
 }
@@ -142,6 +152,9 @@ func (s *commandState) prepareClient(command *cobra.Command, args []string) erro
 		LogLevel:      loader.GetString("log_level"),
 	}
 	if s.settings.Address == "" {
+		if command.Annotations[optionalClientCommand] == "true" {
+			return nil
+		}
 		return statusError(s.runner.usageError("infrahubctl: address is required in --address, INFRAHUB_ADDRESS, or the config file"))
 	}
 	s.client, err = s.settings.NewClient()
@@ -342,4 +355,56 @@ func (s *commandState) graphQLCommand() *cobra.Command {
 	return s.leaf("graphql", func(args []string) int {
 		return s.runner.runGraphQL(s.ctx, s.client, s.settings.DefaultBranch, args)
 	})
+}
+
+func (s *commandState) dumpCommand() *cobra.Command {
+	return s.leaf("dump", func(args []string) int {
+		return s.runner.runDump(s.ctx, s.client, s.settings.DefaultBranch, args)
+	})
+}
+
+func (s *commandState) loadCommand() *cobra.Command {
+	return s.leaf("load", func(args []string) int {
+		return s.runner.runLoad(s.ctx, s.client, s.settings.DefaultBranch, args)
+	})
+}
+
+func (s *commandState) menuCommand() *cobra.Command {
+	command := s.group("menu", func(args []string) int {
+		return s.runner.runMenu(s.ctx, s.client, s.settings.DefaultBranch, args)
+	}, "load", "validate")
+	command.Commands()[1].Annotations = map[string]string{offlineCommand: "true"}
+	return command
+}
+
+func (s *commandState) marketplaceCommand() *cobra.Command {
+	command := s.group("marketplace", func(args []string) int {
+		return s.runner.runMarketplace(s.ctx, args)
+	}, "list", "search", "show", "get")
+	for _, child := range command.Commands() {
+		child.Annotations = map[string]string{offlineCommand: "true"}
+	}
+	return command
+}
+
+func (s *commandState) protocolsCommand() *cobra.Command {
+	command := s.leaf("protocols", func(args []string) int {
+		return s.runner.runProtocols(s.ctx, s.client, s.settings.DefaultBranch, args)
+	})
+	command.Annotations = map[string]string{optionalClientCommand: "true"}
+	return command
+}
+
+func (s *commandState) telemetryCommand() *cobra.Command {
+	return s.group("telemetry", func(args []string) int {
+		return s.runner.runTelemetry(s.ctx, s.client, args)
+	}, "list", "export")
+}
+
+func (s *commandState) validateCommand() *cobra.Command {
+	command := s.group("validate", func(args []string) int {
+		return s.runner.runValidate(s.ctx, s.client, s.settings.DefaultBranch, args)
+	}, "schema", "graphql-query")
+	command.Commands()[1].Annotations = map[string]string{offlineCommand: "true"}
+	return command
 }

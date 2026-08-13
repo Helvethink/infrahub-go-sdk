@@ -15,6 +15,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/resourcepool"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/schema"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/task"
+	"github.com/Helvethink/infrahub-go-sdk/pkg/telemetry"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/traversal"
 )
 
@@ -32,6 +33,7 @@ type Client struct {
 	ResourcePools *resourcepool.Service
 	ObjectStore   *objectstore.Service
 	Tasks         *task.Service
+	Telemetry     *telemetry.Service
 	Traversal     *traversal.Service
 }
 
@@ -69,6 +71,7 @@ func NewClient(address string, options ...Option) (*Client, error) {
 	client.ResourcePools = resourcepool.NewService(protocol)
 	client.ObjectStore = objectstore.NewService(protocol)
 	client.Tasks = task.NewService(protocol)
+	client.Telemetry = telemetry.NewService(protocol)
 	client.Traversal = traversal.NewService(protocol)
 	return client, nil
 }

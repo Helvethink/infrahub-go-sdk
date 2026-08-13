@@ -386,6 +386,12 @@ commands:
   schema load|check|export|list|show  manage schemas
   task list                           list background tasks
   graphql [flags]                     execute a GraphQL document
+  dump|load                           export or import portable node data
+  menu load|validate                  manage Menu v1 files
+  marketplace list|search|show|get    browse marketplace schemas
+  protocols                           generate Python schema protocols
+  telemetry list|export               retrieve telemetry snapshots
+  validate schema|graphql-query       validate local schema or a remote query
 
 global flags:
   -config string    TOML file (INFRAHUB_CONFIG, INFRAHUBCTL_CONFIG, default user config directory)
