@@ -16,6 +16,7 @@ import (
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 	sdkconfig "github.com/Helvethink/infrahub-go-sdk/pkg/config"
 	flag "github.com/spf13/pflag"
+	"go.uber.org/zap"
 )
 
 // BuildInfo contains values normally injected through linker flags.
@@ -31,6 +32,11 @@ type Runner struct {
 	Stdout io.Writer
 	Stderr io.Writer
 	Getenv func(string) string
+	// Logger receives structured CLI diagnostics. When nil, Runner creates a
+	// JSON logger writing to Stderr at the configured log level.
+	Logger         *zap.Logger
+	loggerInjected bool
+	logErrors      bool
 	// UserConfigDir returns the base directory used for the optional default
 	// configuration file. It defaults to os.UserConfigDir.
 	UserConfigDir func() (string, error)
@@ -42,7 +48,7 @@ func (r Runner) Run(ctx context.Context, args []string) int {
 	r = r.withDefaults()
 	command := newRootCommand(ctx, r)
 	normalized := normalizeNamedFlags(args, map[string]struct{}{
-		"address": {}, "branch": {}, "config": {}, "token": {},
+		"address": {}, "branch": {}, "config": {}, "log-level": {}, "token": {},
 	})
 	command.PersistentFlags().SetInterspersed(false)
 	if err := command.PersistentFlags().Parse(normalized); err != nil {
@@ -343,7 +349,15 @@ func (r Runner) writeJSON(value any) int {
 }
 
 func (r Runner) fail(err error) int {
-	_, _ = fmt.Fprintln(r.Stderr, "infrahubctl:", err)
+	if !r.logErrors {
+		_, _ = fmt.Fprintln(r.Stderr, "infrahubctl:", err)
+		return 1
+	}
+	logger := r.Logger
+	if logger == nil {
+		logger = newCLILogger(r.Stderr, zap.ErrorLevel)
+	}
+	logger.Error("command failed", zap.Error(err))
 	return 1
 }
 
@@ -377,7 +391,8 @@ global flags:
   -config string    TOML file (INFRAHUB_CONFIG, INFRAHUBCTL_CONFIG, default user config directory)
   -address string   Infrahub URL (INFRAHUB_ADDRESS)
   -token string     API token (INFRAHUB_API_TOKEN)
-  -branch string    branch (INFRAHUB_BRANCH, INFRAHUB_DEFAULT_BRANCH, default main)`)
+  -branch string    branch (INFRAHUB_BRANCH, INFRAHUB_DEFAULT_BRANCH, default main)
+  -log-level string logging level (INFRAHUB_LOG_LEVEL, default error)`)
 }
 
 func (r Runner) withDefaults() Runner {
@@ -395,6 +410,13 @@ func (r Runner) withDefaults() Runner {
 	}
 	if r.UserConfigDir == nil {
 		r.UserConfigDir = os.UserConfigDir
+	}
+	if r.Logger == nil {
+		r.Logger = newCLILogger(r.Stderr, zap.ErrorLevel)
+		r.logErrors = true
+	} else {
+		r.loggerInjected = true
+		r.logErrors = true
 	}
 	return r
 }

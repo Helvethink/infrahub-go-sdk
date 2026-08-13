@@ -16,6 +16,7 @@ const (
 	EnvAPIToken      = "INFRAHUB_API_TOKEN"
 	EnvDefaultBranch = "INFRAHUB_BRANCH"
 	EnvConfigPath    = "INFRAHUB_CONFIG"
+	EnvLogLevel      = "INFRAHUB_LOG_LEVEL"
 
 	EnvDefaultBranchAlias = "INFRAHUB_DEFAULT_BRANCH"
 	EnvConfigPathAlias    = "INFRAHUBCTL_CONFIG"
@@ -27,6 +28,7 @@ type Config struct {
 	ServerAddress string `mapstructure:"server_address"`
 	APIToken      string `mapstructure:"api_token"`
 	DefaultBranch string `mapstructure:"default_branch"`
+	LogLevel      string `mapstructure:"log_level"`
 }
 
 // Load reads a strict TOML configuration file from path.
@@ -76,6 +78,9 @@ func (c Config) ApplyEnvironment(getenv func(string) string) Config {
 		c.DefaultBranch = value
 	} else if value := getenv(EnvDefaultBranchAlias); value != "" {
 		c.DefaultBranch = value
+	}
+	if value := getenv(EnvLogLevel); value != "" {
+		c.LogLevel = value
 	}
 	return c
 }

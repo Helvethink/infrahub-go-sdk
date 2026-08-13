@@ -3,11 +3,13 @@ package cli
 import (
 	"context"
 	"strings"
+	"time"
 
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 	sdkconfig "github.com/Helvethink/infrahub-go-sdk/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 const offlineCommand = "offline"
@@ -20,6 +22,7 @@ type commandState struct {
 	address    string
 	token      string
 	branch     string
+	logLevel   string
 
 	settings sdkconfig.Config
 	client   *infrahub.Client
@@ -53,6 +56,7 @@ func newRootCommand(ctx context.Context, runner Runner) *cobra.Command {
 	root.PersistentFlags().StringVar(&state.address, "address", "", "Infrahub base URL")
 	root.PersistentFlags().StringVar(&state.token, "token", "", "Infrahub API token")
 	root.PersistentFlags().StringVar(&state.branch, "branch", "", "Infrahub branch")
+	root.PersistentFlags().StringVar(&state.logLevel, "log-level", "", "log level: debug, info, warn, error, or off")
 
 	root.AddCommand(
 		state.versionCommand(),
@@ -70,13 +74,19 @@ func newRootCommand(ctx context.Context, runner Runner) *cobra.Command {
 }
 
 func (s *commandState) prepareClient(command *cobra.Command, args []string) error {
-	if command == command.Root() || command.Name() == "help" || command.Annotations[offlineCommand] == "true" {
+	if command == command.Root() || command.Name() == "help" {
 		return nil
 	}
 	for _, arg := range args {
 		if arg == "-h" || arg == "--help" {
 			return nil
 		}
+	}
+	if err := s.configureLogger(environmentLogLevel(s.runner.Getenv, s.logLevel, command.Root().PersistentFlags().Changed("log-level"))); err != nil {
+		return statusError(s.runner.usageError(err.Error()))
+	}
+	if command.Annotations[offlineCommand] == "true" {
+		return nil
 	}
 	settings, err := s.runner.loadConfig(s.configPath, command.Root().PersistentFlags().Changed("config"))
 	if err != nil {
@@ -85,6 +95,7 @@ func (s *commandState) prepareClient(command *cobra.Command, args []string) erro
 
 	loader := viper.New()
 	loader.SetDefault("default_branch", "main")
+	loader.SetDefault("log_level", "error")
 	if err := loader.MergeConfigMap(configMap(settings)); err != nil {
 		return statusError(s.runner.fail(err))
 	}
@@ -93,7 +104,7 @@ func (s *commandState) prepareClient(command *cobra.Command, args []string) erro
 	}
 	flags := command.Root().PersistentFlags()
 	for key, name := range map[string]string{
-		"address": "address", "api_token": "token", "default_branch": "branch",
+		"address": "address", "api_token": "token", "default_branch": "branch", "log_level": "log-level",
 	} {
 		if err := loader.BindPFlag(key, flags.Lookup(name)); err != nil {
 			return statusError(s.runner.fail(err))
@@ -108,10 +119,27 @@ func (s *commandState) prepareClient(command *cobra.Command, args []string) erro
 	if flags.Changed("branch") {
 		loader.Set("default_branch", s.branch)
 	}
+	if flags.Changed("log-level") {
+		loader.Set("log_level", s.logLevel)
+	}
+	level, enabled, err := parseLogLevel(loader.GetString("log_level"))
+	if err != nil {
+		return statusError(s.runner.usageError(err.Error()))
+	}
+	if !s.runner.loggerInjected {
+		if enabled {
+			s.runner.Logger = newCLILogger(s.runner.Stderr, level)
+			s.runner.logErrors = true
+		} else {
+			s.runner.Logger = zap.NewNop()
+			s.runner.logErrors = false
+		}
+	}
 	s.settings = sdkconfig.Config{
 		Address:       loader.GetString("address"),
 		APIToken:      loader.GetString("api_token"),
 		DefaultBranch: loader.GetString("default_branch"),
+		LogLevel:      loader.GetString("log_level"),
 	}
 	if s.settings.Address == "" {
 		return statusError(s.runner.usageError("infrahubctl: address is required in --address, INFRAHUB_ADDRESS, or the config file"))
@@ -121,6 +149,34 @@ func (s *commandState) prepareClient(command *cobra.Command, args []string) erro
 		return statusError(s.runner.fail(err))
 	}
 	return nil
+}
+
+func (s *commandState) configureLogger(value string) error {
+	if s.runner.loggerInjected {
+		return nil
+	}
+	level, enabled, err := parseLogLevel(value)
+	if err != nil {
+		return err
+	}
+	if enabled {
+		s.runner.Logger = newCLILogger(s.runner.Stderr, level)
+		s.runner.logErrors = true
+	} else {
+		s.runner.Logger = zap.NewNop()
+		s.runner.logErrors = false
+	}
+	return nil
+}
+
+func environmentLogLevel(getenv func(string) string, flagValue string, flagSet bool) string {
+	if flagSet {
+		return flagValue
+	}
+	if value := getenv(sdkconfig.EnvLogLevel); value != "" {
+		return value
+	}
+	return "error"
 }
 
 func normalizeNamedFlags(args []string, names map[string]struct{}) []string {
@@ -151,6 +207,9 @@ func configMap(settings sdkconfig.Config) map[string]any {
 	if settings.DefaultBranch != "" {
 		result["default_branch"] = settings.DefaultBranch
 	}
+	if settings.LogLevel != "" {
+		result["log_level"] = settings.LogLevel
+	}
 	return result
 }
 
@@ -166,6 +225,9 @@ func environmentMap(getenv func(string) string) map[string]any {
 		result["default_branch"] = value
 	} else if value := getenv(sdkconfig.EnvDefaultBranchAlias); value != "" {
 		result["default_branch"] = value
+	}
+	if value := getenv(sdkconfig.EnvLogLevel); value != "" {
+		result["log_level"] = value
 	}
 	return result
 }
@@ -187,7 +249,7 @@ func (s *commandState) leaf(use string, run func([]string) int) *cobra.Command {
 					return command.Help()
 				}
 			}
-			return statusError(run(args))
+			return s.execute(command, func() int { return run(args) })
 		},
 	}
 }
@@ -206,6 +268,18 @@ func (s *commandState) group(use string, run func([]string) int, leaves ...strin
 		}))
 	}
 	return command
+}
+
+func (s *commandState) execute(command *cobra.Command, run func() int) error {
+	started := time.Now()
+	s.runner.Logger.Info("command started", zap.String("command", command.CommandPath()))
+	code := run()
+	s.runner.Logger.Info("command finished",
+		zap.String("command", command.CommandPath()),
+		zap.Int("exit_code", code),
+		zap.Duration("duration", time.Since(started)),
+	)
+	return statusError(code)
 }
 
 func (s *commandState) versionCommand() *cobra.Command {
