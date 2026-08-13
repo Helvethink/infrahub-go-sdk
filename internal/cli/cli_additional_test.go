@@ -156,12 +156,14 @@ func TestObjectCRUDCommands(t *testing.T) {
 	}{
 		{name: "get by HFID", args: []string{"object", "get", "BuiltinTag", "platform/core", "--branch", "feature"}, wantOperation: "GetBuiltinTagByHFID", response: `{"data":{"BuiltinTag":{"count":1,"edges":[{"node":{"id":"tag-id","kind":"BuiltinTag","hfid":["platform","core"],"display_label":"core"}}]}}}`, wantStdout: `"id": "tag-id"`},
 		{name: "query", args: []string{"object", "get", "BuiltinTag", "--filter", "name=core", "--limit", "5", "--offset", "2"}, wantOperation: "QueryBuiltinTag", response: `{"data":{"BuiltinTag":{"count":1,"edges":[{"node":{"id":"tag-id","kind":"BuiltinTag","hfid":["core"],"display_label":"core"}}]}}}`, wantStdout: `"Limit": 5`, check: func(t *testing.T, request cliRequest) {
+			t.Helper()
 			if request.Variables["offset"] != float64(2) || request.Variables["limit"] != float64(5) || request.Variables["filter0"] != "core" {
 				t.Errorf("variables = %#v", request.Variables)
 			}
 		}},
 		{name: "query empty", args: []string{"object", "get", "BuiltinTag"}, wantOperation: "QueryBuiltinTag", response: `{"data":{"BuiltinTag":{"count":0,"edges":[]}}}`, wantExit: 80},
 		{name: "update", args: []string{"object", "update", "BuiltinTag", "platform/core", "--set", `description="updated"`, "--branch", "feature"}, wantOperation: "BuiltinTagUpdate", response: `{"data":{"BuiltinTagUpdate":{"ok":true,"object":{"id":"tag-id","kind":"BuiltinTag","hfid":["platform","core"],"display_label":"core"}}}}`, wantStdout: `"id": "tag-id"`, check: func(t *testing.T, request cliRequest) {
+			t.Helper()
 			data, _ := request.Variables["data"].(map[string]any)
 			hfid, _ := data["hfid"].([]any)
 			if len(hfid) != 2 || hfid[0] != "platform" {

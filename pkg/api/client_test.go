@@ -136,7 +136,7 @@ func TestExecuteResponseLimit(t *testing.T) {
 
 func TestExecuteCancellation(t *testing.T) {
 	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
 	defer server.Close()
 	client, err := NewClient(server.URL, testConfig(server.Client()))
 	if err != nil {

@@ -91,7 +91,7 @@ func TestListGetAndNotFound(t *testing.T) {
 	t.Parallel()
 	var found atomic.Bool
 	found.Store(true)
-	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+	service, server := newTestService(t, func(w http.ResponseWriter, _ *http.Request) {
 		if found.Load() {
 			_, _ = w.Write([]byte(`{"data":{"BuiltinTag":{"count":1,"edges":[{"node":{"id":"tag-id","kind":"BuiltinTag","hfid":["staging"],"display_label":"staging"}}]}}}`))
 			return

@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	flag "github.com/spf13/pflag"
+
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
-	flag "github.com/spf13/pflag"
 )
 
 func (r Runner) runObject(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
