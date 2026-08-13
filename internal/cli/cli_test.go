@@ -114,6 +114,26 @@ func TestHelpDoesNotRequireAddress(t *testing.T) {
 	}
 }
 
+func TestNestedHelpDoesNotRequireAddress(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	exitCode := testRunner(&stdout, &stderr).Run(context.Background(), []string{"object", "get", "--help"})
+	if exitCode != 0 || !strings.Contains(stderr.String(), "object get") {
+		t.Fatalf("exit=%d stderr=%q", exitCode, stderr.String())
+	}
+}
+
+func TestDoubleDashGlobalFlag(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	exitCode := testRunner(&stdout, &stderr).Run(context.Background(), []string{
+		"--address", "https://example.com", "graphql", "--query", "query { x }", "--variables", "invalid",
+	})
+	if exitCode != 2 || !strings.Contains(stderr.String(), "invalid --variables") {
+		t.Fatalf("exit=%d stderr=%q", exitCode, stderr.String())
+	}
+}
+
 func TestBranchList(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
