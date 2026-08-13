@@ -317,33 +317,60 @@ func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch str
 	}
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64*1024), 16<<20)
-	loaded, failed := 0, 0
+	type pendingNode struct {
+		record        dumpRecord
+		data          map[string]any
+		relationships map[string]any
+		hfid          []string
+	}
+	var pending []pendingNode
 	for scanner.Scan() {
 		var record dumpRecord
 		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			return r.fail(fmt.Errorf("decode nodes.json line %d: %w", loaded+failed+1, err))
+			return r.fail(fmt.Errorf("decode nodes.json line %d: %w", len(pending)+1, err))
 		}
 		var data map[string]any
 		if err := json.Unmarshal([]byte(record.GraphQLJSON), &data); err != nil {
 			return r.fail(fmt.Errorf("decode node %q: %w", record.ID, err))
 		}
-		delete(data, "kind")
-		delete(data, "display_label")
-		delete(data, "__typename")
-		if record.ID != "" {
-			data["id"] = record.ID
-		}
-		if _, err := client.Nodes.Upsert(ctx, record.Kind, data, *commandBranch); err != nil {
+		data, relationships, hfid := dumpMutationData(data)
+		pending = append(pending, pendingNode{record: record, data: data, relationships: relationships, hfid: hfid})
+	}
+	if err := scanner.Err(); err != nil {
+		return r.fail(err)
+	}
+	loaded, failed := 0, 0
+	idMap := make(map[string]string, len(pending))
+	for index := range pending {
+		item := &pending[index]
+		restored, err := restoreDumpNode(ctx, client.Nodes, item.record, item.data, item.hfid, *commandBranch)
+		if err != nil {
 			failed++
 			if !*continueOnError {
 				return r.fail(err)
 			}
 			continue
 		}
+		if item.record.ID != "" {
+			idMap[item.record.ID] = restored.ID
+		}
 		loaded++
 	}
-	if err := scanner.Err(); err != nil {
-		return r.fail(err)
+	for _, item := range pending {
+		sourceID := idMap[item.record.ID]
+		if sourceID == "" || len(item.relationships) == 0 {
+			continue
+		}
+		data := map[string]any{"id": sourceID}
+		for name, value := range item.relationships {
+			data[name] = remapRelatedNodeIDs(value, idMap)
+		}
+		if _, err := client.Nodes.Upsert(ctx, item.record.Kind, data, *commandBranch); err != nil {
+			failed++
+			if !*continueOnError {
+				return r.fail(err)
+			}
+		}
 	}
 	if len(relationshipEdges) > 0 {
 		var rawSchema map[string]any
@@ -360,6 +387,8 @@ func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch str
 				continue
 			}
 			source, destination := edge.Node.Peers[0], edge.Node.Peers[1]
+			source.ID = remapNodeID(source.ID, idMap)
+			destination.ID = remapNodeID(destination.ID, idMap)
 			name := relationshipNames[source.Kind+"\x00"+edge.Node.Identifier]
 			if name == "" {
 				source, destination = destination, source
@@ -390,6 +419,126 @@ func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch str
 		return 1
 	}
 	return 0
+}
+
+func dumpMutationData(data map[string]any) (map[string]any, map[string]any, []string) {
+	hfid := stringSlice(data["hfid"])
+	delete(data, "id")
+	delete(data, "kind")
+	delete(data, "hfid")
+	delete(data, "display_label")
+	delete(data, "__typename")
+	relationships := map[string]any{}
+	for name, value := range data {
+		relationship, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		if edges, ok := relationship["edges"].([]any); ok {
+			relationships[name] = relatedNodeInputs(edges)
+			delete(data, name)
+			continue
+		}
+		if related, exists := relationship["node"]; exists {
+			relationships[name] = relatedNodeInput(related)
+			delete(data, name)
+		}
+	}
+	return data, relationships, hfid
+}
+
+func stringSlice(value any) []string {
+	raw, _ := value.([]any)
+	result := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if text, ok := item.(string); ok {
+			result = append(result, text)
+		}
+	}
+	return result
+}
+
+func relatedNodeInputs(edges []any) []map[string]any {
+	result := make([]map[string]any, 0, len(edges))
+	for _, rawEdge := range edges {
+		edge, _ := rawEdge.(map[string]any)
+		if related := relatedNodeInput(edge["node"]); related != nil {
+			result = append(result, related)
+		}
+	}
+	return result
+}
+
+func relatedNodeInput(value any) map[string]any {
+	related, _ := value.(map[string]any)
+	id, _ := related["id"].(string)
+	if id == "" {
+		return nil
+	}
+	return map[string]any{"id": id}
+}
+
+func remapRelatedNodeIDs(value any, ids map[string]string) any {
+	switch related := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(related))
+		for name, field := range related {
+			result[name] = field
+		}
+		if id, _ := result["id"].(string); id != "" {
+			result["id"] = remapNodeID(id, ids)
+		}
+		return result
+	case []map[string]any:
+		result := make([]map[string]any, 0, len(related))
+		for _, item := range related {
+			mapped, _ := remapRelatedNodeIDs(item, ids).(map[string]any)
+			result = append(result, mapped)
+		}
+		return result
+	default:
+		return value
+	}
+}
+
+func remapNodeID(id string, ids map[string]string) string {
+	if replacement := ids[id]; replacement != "" {
+		return replacement
+	}
+	return id
+}
+
+func restoreDumpNode(
+	ctx context.Context,
+	service *node.Service,
+	record dumpRecord,
+	data map[string]any,
+	hfid []string,
+	branch string,
+) (*node.Node, error) {
+	if record.ID == "" {
+		return service.Upsert(ctx, record.Kind, data, branch)
+	}
+	_, err := service.GetByID(ctx, record.Kind, record.ID, branch)
+	if err == nil {
+		data["id"] = record.ID
+		return service.Upsert(ctx, record.Kind, data, branch)
+	}
+	var notFound *infrahub.NotFoundError
+	if !errors.As(err, &notFound) {
+		return nil, err
+	}
+	if len(hfid) > 0 {
+		existing, lookupErr := service.GetByHFID(ctx, record.Kind, hfid, branch)
+		if lookupErr == nil {
+			data["id"] = existing.ID
+			return service.Upsert(ctx, record.Kind, data, branch)
+		}
+		if !errors.As(lookupErr, &notFound) {
+			return nil, lookupErr
+		}
+	}
+	return service.Create(ctx, record.Kind, data, branch)
 }
 
 func relationshipNamesByKind(schema map[string]any) map[string]string {
