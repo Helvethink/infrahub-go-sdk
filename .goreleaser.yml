@@ -43,7 +43,7 @@ archives:
 
 nfpms:
   - maintainer: &author Helvethink <technical@helvethink.ch>
-    description: &description GitLab CI exporter (prometheus/open-metrics)
+    description: &description Infrahub Go SDK
     license: &license Apache-2.0
     homepage: &homepage https://github.com/helvethink/infrahub-go-sdk
     vendor: *author
@@ -54,7 +54,7 @@ nfpms:
       - deb
       - rpm
     contents:
-      - src: ./LICENSE
+      - src: ./LICENSE.md
         dst: /usr/share/doc/{{ .ProjectName }}/copyright
         file_info:
           mode: 0644
