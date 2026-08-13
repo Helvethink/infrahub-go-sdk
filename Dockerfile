@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine3.23 AS builder
 
 ARG PROJECT_NAME=infrahubctl
 ARG TARGETOS
@@ -8,7 +8,7 @@ ENV CGO_ENABLED=0
 
 WORKDIR /src
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates=20260611-r0
 
 FROM scratch
 
