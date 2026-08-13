@@ -17,8 +17,13 @@ var (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	runner := cli.Runner{Build: cli.BuildInfo{Version: version, Commit: commit, Date: date}}
-	os.Exit(runner.Run(ctx, os.Args[1:]))
+
+	return runner.Run(ctx, os.Args[1:])
 }
