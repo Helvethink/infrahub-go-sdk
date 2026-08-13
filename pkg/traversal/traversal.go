@@ -12,9 +12,11 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
 
-const nodeFields = `id kind label display_label hfid`
-const relationshipFields = `from_rel from_label to_rel to_label kind`
-const pathFields = `hops { node { ` + nodeFields + ` } relationship { ` + relationshipFields + ` } } depth`
+const (
+	nodeFields         = `id kind label display_label hfid`
+	relationshipFields = `from_rel from_label to_rel to_label kind`
+	pathFields         = `hops { node { ` + nodeFields + ` } relationship { ` + relationshipFields + ` } } depth`
+)
 
 // Node is the stable identity of a node encountered during traversal.
 type Node struct {
@@ -128,10 +130,10 @@ func (s *Service) Paths(ctx context.Context, options PathsOptions) (*PathsResult
 	if options.SourceID == "" || options.DestinationID == "" {
 		return nil, fmt.Errorf("infrahub: traversal source and destination IDs must not be empty")
 	}
-	if err := validateRange("max depth", options.MaxDepth, 1, 30); err != nil {
+	if err := validateRange("max depth", options.MaxDepth, 30); err != nil {
 		return nil, err
 	}
-	if err := validateRange("max paths", options.MaxPaths, 1, 100); err != nil {
+	if err := validateRange("max paths", options.MaxPaths, 100); err != nil {
 		return nil, err
 	}
 	input := map[string]any{"source_id": options.SourceID, "destination_id": options.DestinationID}
@@ -173,13 +175,13 @@ func (s *Service) Reachable(ctx context.Context, options ReachableOptions) (*Rea
 	if len(options.TargetKinds) == 0 {
 		return nil, fmt.Errorf("infrahub: traversal target kinds must not be empty")
 	}
-	if err := validateRange("max depth", options.MaxDepth, 1, 30); err != nil {
+	if err := validateRange("max depth", options.MaxDepth, 30); err != nil {
 		return nil, err
 	}
-	if err := validateRange("max results", options.MaxResults, 1, 200); err != nil {
+	if err := validateRange("max results", options.MaxResults, 200); err != nil {
 		return nil, err
 	}
-	if err := validateRange("max paths", options.MaxPaths, 1, 5000); err != nil {
+	if err := validateRange("max paths", options.MaxPaths, 5000); err != nil {
 		return nil, err
 	}
 	input := map[string]any{"source_id": options.SourceID, "target_kinds": append([]string(nil), options.TargetKinds...)}
@@ -201,9 +203,9 @@ func (s *Service) Reachable(ctx context.Context, options ReachableOptions) (*Rea
 	return &response.Result, err
 }
 
-func validateRange(name string, value *int, minimum, maximum int) error {
-	if value != nil && (*value < minimum || *value > maximum) {
-		return fmt.Errorf("infrahub: traversal %s must be between %d and %d", name, minimum, maximum)
+func validateRange(name string, value *int, maximum int) error {
+	if value != nil && (*value < 1 || *value > maximum) {
+		return fmt.Errorf("infrahub: traversal %s must be between 1 and %d", name, maximum)
 	}
 	return nil
 }
