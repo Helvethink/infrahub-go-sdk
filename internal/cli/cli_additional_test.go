@@ -87,15 +87,22 @@ func TestBranchCommands(t *testing.T) {
 func TestBranchReport(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodGet || request.URL.EscapedPath() != "/api/diff/data" || request.URL.Query().Get("branch") != "feature" {
+		if request.Method != http.MethodPost || request.URL.EscapedPath() != "/graphql/feature" {
 			t.Errorf("request = %s %s", request.Method, request.URL.String())
 		}
-		_, _ = io.WriteString(w, `{"changed":1}`)
+		var payload cliRequest
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.OperationName != "BranchDiffData" || payload.Variables["branch"] != "feature" || payload.Variables["includeParents"] != true {
+			t.Errorf("payload = %#v", payload)
+		}
+		_, _ = io.WriteString(w, `{"data":{"DiffTree":{"num_added":1,"nodes":[]}}}`)
 	}))
 	defer server.Close()
 
 	stdout, stderr, exitCode := runCLI(t, server, "branch", "report", "feature", "--update-diff")
-	if exitCode != 0 || !strings.Contains(stdout, `"changed": 1`) || !strings.Contains(stderr, "accepted for compatibility") {
+	if exitCode != 0 || !strings.Contains(stdout, `"num_added": 1`) || !strings.Contains(stderr, "accepted for compatibility") {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
 	}
 }
