@@ -207,6 +207,7 @@ func nullableString(value string) any {
 	}
 	return value
 }
+
 func nullableTime(value time.Time) any {
 	if value.IsZero() {
 		return nil

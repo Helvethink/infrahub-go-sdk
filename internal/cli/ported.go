@@ -17,10 +17,11 @@ import (
 	"strings"
 	"time"
 
+	flag "github.com/spf13/pflag"
+
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/telemetry"
-	flag "github.com/spf13/pflag"
 )
 
 type dumpRecord struct {
@@ -669,7 +670,8 @@ func mergeSchemaDocuments(documents []map[string]any) map[string]any {
 	for _, document := range documents {
 		for _, section := range []string{"nodes", "generics"} {
 			if items, ok := document[section].([]any); ok {
-				merged[section] = append(merged[section].([]any), items...)
+				current, _ := merged[section].([]any)
+				merged[section] = append(current, items...)
 			}
 		}
 	}

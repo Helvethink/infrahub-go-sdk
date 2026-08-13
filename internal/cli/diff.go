@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	infrahub "github.com/Helvethink/infrahub-go-sdk"
 	flag "github.com/spf13/pflag"
+
+	infrahub "github.com/Helvethink/infrahub-go-sdk"
 )
 
 func (r Runner) runDiff(ctx context.Context, client *infrahub.Client, branch string, args []string) int {

@@ -5,11 +5,12 @@ import (
 	"strings"
 	"time"
 
-	infrahub "github.com/Helvethink/infrahub-go-sdk"
-	sdkconfig "github.com/Helvethink/infrahub-go-sdk/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+
+	infrahub "github.com/Helvethink/infrahub-go-sdk"
+	sdkconfig "github.com/Helvethink/infrahub-go-sdk/pkg/config"
 )
 
 const (

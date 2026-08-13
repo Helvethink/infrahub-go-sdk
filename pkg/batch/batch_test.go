@@ -22,7 +22,10 @@ func TestMapBoundsConcurrencyAndPreservesInputOrder(t *testing.T) {
 		defer close(done)
 		results, runErr = batch.Map(context.Background(), []int{3, 1, 2}, func(_ context.Context, input int) (int, error) {
 			current := active.Add(1)
-			for previous := peak.Load(); current > previous && !peak.CompareAndSwap(previous, current); previous = peak.Load() {
+			for previous := peak.Load(); current > previous; previous = peak.Load() {
+				if peak.CompareAndSwap(previous, current) {
+					break
+				}
 			}
 			started <- struct{}{}
 			<-release

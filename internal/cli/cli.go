@@ -13,10 +13,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	infrahub "github.com/Helvethink/infrahub-go-sdk"
-	sdkconfig "github.com/Helvethink/infrahub-go-sdk/pkg/config"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/zap"
+
+	infrahub "github.com/Helvethink/infrahub-go-sdk"
+	sdkconfig "github.com/Helvethink/infrahub-go-sdk/pkg/config"
 )
 
 // BuildInfo contains values normally injected through linker flags.
@@ -442,7 +443,7 @@ func (r Runner) loadConfig(path string, explicitlySet bool) (sdkconfig.Config, e
 	if path == "" {
 		directory, err := r.UserConfigDir()
 		if err != nil {
-			return sdkconfig.Config{}, nil
+			return sdkconfig.Config{}, fmt.Errorf("resolve user config directory: %w", err)
 		}
 		path = filepath.Join(directory, "infrahub", "config.toml")
 	}
