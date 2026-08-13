@@ -40,7 +40,7 @@ The Python CLI command list was checked against the Infrahub documentation in Au
 | `task list` | Available |
 | `version` | Available |
 | `check`, `generator`, `render`, `run`, `transform` | Not ported; Python-runtime/Jinja execution is intentionally not embedded in the Go CLI |
-| `dump`, `load` | Available; Python 1.22.2-compatible `nodes.json` LDJSON and `relationships.json` files, with explicit overwrite protection |
+| `dump`, `load` | Available; Python 1.22.2-compatible `nodes.json` LDJSON and `relationships.json` files, with explicit overwrite protection. Loading into another branch creates missing nodes with new IDs and remaps dumped relationships to those IDs. |
 | `menu load/validate` | Available for `infrahub.app/v1` Menu documents; missing paths and order weights are derived deterministically |
 | `marketplace list/search/show/get` | Available against Marketplace API v1; schema downloads and collection metadata are supported, while dependency-tree expansion remains intentionally explicit rather than automatic |
 | `protocols` | Available; generates deterministic Python `Protocol` classes from a remote branch schema or local `--schema` documents |
