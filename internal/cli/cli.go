@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +15,7 @@ import (
 
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 	sdkconfig "github.com/Helvethink/infrahub-go-sdk/pkg/config"
+	flag "github.com/spf13/pflag"
 )
 
 // BuildInfo contains values normally injected through linker flags.
@@ -40,69 +40,29 @@ type Runner struct {
 // Run executes the CLI and returns a process exit code.
 func (r Runner) Run(ctx context.Context, args []string) int {
 	r = r.withDefaults()
-	global := flag.NewFlagSet("infrahubctl", flag.ContinueOnError)
-	global.SetOutput(r.Stderr)
-	configPath := global.String("config", "", "TOML config file")
-	address := global.String("address", "", "Infrahub base URL")
-	token := global.String("token", "", "Infrahub API token")
-	branch := global.String("branch", "", "Infrahub branch")
-	global.Usage = func() { r.printUsage() }
-	if err := global.Parse(args); err != nil {
+	command := newRootCommand(ctx, r)
+	normalized := normalizeNamedFlags(args, map[string]struct{}{
+		"address": {}, "branch": {}, "config": {}, "token": {},
+	})
+	command.PersistentFlags().SetInterspersed(false)
+	if err := command.PersistentFlags().Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			r.printUsage()
 			return 0
 		}
+		_, _ = fmt.Fprintln(r.Stderr, "infrahubctl:", err)
 		return 2
 	}
-	remaining := global.Args()
-	if len(remaining) == 0 {
-		r.printUsage()
+	command.SetArgs(command.PersistentFlags().Args())
+	if err := command.Execute(); err != nil {
+		var status *exitStatusError
+		if errors.As(err, &status) {
+			return status.code
+		}
+		_, _ = fmt.Fprintln(r.Stderr, "infrahubctl:", err)
 		return 2
 	}
-	if remaining[0] == "version" {
-		return r.runVersion()
-	}
-	if remaining[0] == "help" {
-		r.printUsage()
-		return 0
-	}
-	flagsSet := make(map[string]bool)
-	global.Visit(func(item *flag.Flag) { flagsSet[item.Name] = true })
-	settings, err := r.loadConfig(*configPath, flagsSet["config"])
-	if err != nil {
-		return r.fail(err)
-	}
-	settings = settings.ApplyEnvironment(r.Getenv)
-	if flagsSet["address"] {
-		settings.Address = *address
-	}
-	if flagsSet["token"] {
-		settings.APIToken = *token
-	}
-	if flagsSet["branch"] {
-		settings.DefaultBranch = *branch
-	}
-	if settings.DefaultBranch == "" {
-		settings.DefaultBranch = "main"
-	}
-	if settings.Address == "" {
-		return r.usageError("infrahubctl: address is required in --address, INFRAHUB_ADDRESS, or the config file")
-	}
-	client, err := settings.NewClient()
-	if err != nil {
-		return r.fail(err)
-	}
-	switch remaining[0] {
-	case "branch":
-		return r.runBranch(ctx, client, remaining[1:])
-	case "schema":
-		return r.runSchema(ctx, client, settings.DefaultBranch, remaining[1:])
-	case "graphql":
-		return r.runGraphQL(ctx, client, settings.DefaultBranch, remaining[1:])
-	default:
-		_, _ = fmt.Fprintf(r.Stderr, "infrahubctl: unknown command %q\n", remaining[0])
-		r.printUsage()
-		return 2
-	}
+	return 0
 }
 
 func (r Runner) runVersion() int {
@@ -122,7 +82,7 @@ func (r Runner) runVersion() int {
 
 func (r Runner) runBranch(ctx context.Context, client *infrahub.Client, args []string) int {
 	if len(args) == 0 {
-		return r.usageError("usage: infrahubctl [global flags] branch <list|get|create|delete|rebase|validate|merge>")
+		return r.usageError("usage: infrahubctl [global flags] branch <list|get|create|delete|rebase|validate|merge|report>")
 	}
 	switch args[0] {
 	case "list":
@@ -145,7 +105,7 @@ func (r Runner) runBranch(ctx context.Context, client *infrahub.Client, args []s
 		command.SetOutput(r.Stderr)
 		description := command.String("description", "", "branch description")
 		syncWithGit := command.Bool("sync-with-git", false, "synchronize branch with Git")
-		if err := command.Parse(args[1:]); err != nil {
+		if err := parseInterspersed(command, args[1:]); err != nil {
 			return flagExitCode(err)
 		}
 		if command.NArg() != 1 {
@@ -173,26 +133,164 @@ func (r Runner) runBranch(ctx context.Context, client *infrahub.Client, args []s
 			return r.fail(fmt.Errorf("write output: %w", err))
 		}
 		return 0
+	case "report":
+		command := flag.NewFlagSet("branch report", flag.ContinueOnError)
+		command.SetOutput(r.Stderr)
+		updateDiff := command.Bool("update-diff", false, "accepted for compatibility; reports current diff data")
+		if err := parseInterspersed(command, args[1:]); err != nil {
+			return flagExitCode(err)
+		}
+		if command.NArg() != 1 {
+			return r.usageError("usage: infrahubctl branch report [flags] <name>")
+		}
+		if *updateDiff {
+			_, _ = fmt.Fprintln(r.Stderr, "infrahubctl: --update-diff is accepted for compatibility; the Go SDK reports current diff data")
+		}
+		var result any
+		if err := client.Branches.DiffData(ctx, command.Arg(0), false, "", "", &result); err != nil {
+			return r.fail(err)
+		}
+		return r.writeJSON(result)
 	default:
 		return r.usageError("infrahubctl: unknown branch command " + args[0])
 	}
 }
 
 func (r Runner) runSchema(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
-	if len(args) != 1 || args[0] != "graphql" {
-		return r.usageError("usage: infrahubctl [global flags] schema graphql")
+	if len(args) == 0 {
+		return r.usageError("usage: infrahubctl [global flags] schema <graphql|load|check|export|list|show>")
 	}
-	result, err := client.Schema.GraphQL(ctx, branch)
+	switch args[0] {
+	case "graphql":
+		if len(args) != 1 {
+			return r.usageError("usage: infrahubctl [global flags] schema graphql")
+		}
+		result, err := client.Schema.GraphQL(ctx, branch)
+		if err != nil {
+			return r.fail(err)
+		}
+		if !strings.HasSuffix(result, "\n") {
+			result += "\n"
+		}
+		if _, err := io.WriteString(r.Stdout, result); err != nil {
+			return r.fail(fmt.Errorf("write output: %w", err))
+		}
+		return 0
+	case "load", "check":
+		return r.runSchemaApply(ctx, client, branch, args[0], args[1:])
+	case "export":
+		return r.runSchemaExport(ctx, client, branch, args[1:])
+	case "list":
+		return r.runSchemaList(ctx, client, branch, args[1:])
+	case "show":
+		return r.runSchemaShow(ctx, client, branch, args[1:])
+	default:
+		return r.usageError("infrahubctl: unknown schema command " + args[0])
+	}
+}
+
+func (r Runner) runInfo(client *infrahub.Client) int {
+	return r.writeJSON(map[string]string{
+		"client":         "infrahub-go-sdk",
+		"version":        envOrValue(r.Build.Version, "dev"),
+		"commit":         r.Build.Commit,
+		"date":           r.Build.Date,
+		"default_branch": client.DefaultBranch(),
+	})
+}
+
+func (r Runner) runSchemaApply(ctx context.Context, client *infrahub.Client, branch, operation string, args []string) int {
+	command := flag.NewFlagSet("schema "+operation, flag.ContinueOnError)
+	command.SetOutput(r.Stderr)
+	commandBranch := command.String("branch", branch, "target branch")
+	_ = command.Bool("debug", false, "accepted for compatibility")
+	wait := command.Int("wait", 0, "accepted for compatibility")
+	if err := parseInterspersed(command, args); err != nil {
+		return flagExitCode(err)
+	}
+	if command.NArg() == 0 {
+		return r.usageError("usage: infrahubctl schema " + operation + " [flags] <schema-file-or-directory>...")
+	}
+	if *wait < 0 {
+		return r.usageError("--wait must not be negative")
+	}
+	schemas, err := readSchemaDocuments(command.Args())
 	if err != nil {
 		return r.fail(err)
 	}
-	if !strings.HasSuffix(result, "\n") {
-		result += "\n"
+	var result any
+	if operation == "load" {
+		err = client.Schema.Load(ctx, *commandBranch, schemas, &result)
+	} else {
+		err = client.Schema.Check(ctx, *commandBranch, schemas, &result)
 	}
-	if _, err := io.WriteString(r.Stdout, result); err != nil {
-		return r.fail(fmt.Errorf("write output: %w", err))
+	if err != nil {
+		return r.fail(err)
 	}
-	return 0
+	return r.writeJSON(result)
+}
+
+func (r Runner) runSchemaExport(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
+	command := flag.NewFlagSet("schema export", flag.ContinueOnError)
+	command.SetOutput(r.Stderr)
+	commandBranch := command.String("branch", branch, "source branch")
+	namespaces := multiFlag{}
+	command.Var(&namespaces, "namespaces", "namespace to export")
+	_ = command.String("directory", "", "accepted for compatibility; JSON is written to stdout")
+	_ = command.Bool("debug", false, "accepted for compatibility")
+	if err := parseInterspersed(command, args); err != nil {
+		return flagExitCode(err)
+	}
+	if command.NArg() != 0 {
+		return r.usageError("usage: infrahubctl schema export [flags]")
+	}
+	var result any
+	if err := client.Schema.Fetch(ctx, *commandBranch, namespaces, &result); err != nil {
+		return r.fail(err)
+	}
+	return r.writeJSON(result)
+}
+
+func (r Runner) runSchemaList(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
+	command := flag.NewFlagSet("schema list", flag.ContinueOnError)
+	command.SetOutput(r.Stderr)
+	filter := command.String("filter", "", "filter kinds by name")
+	commandBranch := command.String("branch", branch, "target branch")
+	if err := parseInterspersed(command, args); err != nil {
+		return flagExitCode(err)
+	}
+	if command.NArg() != 0 {
+		return r.usageError("usage: infrahubctl schema list [flags]")
+	}
+	var result any
+	if err := client.Schema.Fetch(ctx, *commandBranch, nil, &result); err != nil {
+		return r.fail(err)
+	}
+	if *filter == "" {
+		return r.writeJSON(result)
+	}
+	return r.writeJSON(filterSchemaKinds(result, *filter))
+}
+
+func (r Runner) runSchemaShow(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
+	command := flag.NewFlagSet("schema show", flag.ContinueOnError)
+	command.SetOutput(r.Stderr)
+	commandBranch := command.String("branch", branch, "target branch")
+	if err := parseInterspersed(command, args); err != nil {
+		return flagExitCode(err)
+	}
+	if command.NArg() != 1 {
+		return r.usageError("usage: infrahubctl schema show [flags] <kind>")
+	}
+	var result any
+	if err := client.Schema.Fetch(ctx, *commandBranch, nil, &result); err != nil {
+		return r.fail(err)
+	}
+	item, ok := findSchemaKind(result, command.Arg(0))
+	if !ok {
+		return r.fail(fmt.Errorf("schema kind %q not found", command.Arg(0)))
+	}
+	return r.writeJSON(item)
 }
 
 func (r Runner) runGraphQL(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
@@ -201,7 +299,7 @@ func (r Runner) runGraphQL(ctx context.Context, client *infrahub.Client, branch 
 	query := command.String("query", "", "GraphQL document; read stdin when empty")
 	variables := command.String("variables", "{}", "GraphQL variables as JSON")
 	operation := command.String("operation", "", "GraphQL operation name")
-	if err := command.Parse(args); err != nil {
+	if err := parseInterspersed(command, args); err != nil {
 		return flagExitCode(err)
 	}
 	if command.NArg() != 0 {
@@ -259,18 +357,27 @@ func (r Runner) printUsage() {
 
 commands:
   version                              print build information
+  info                                 print client information
   branch list                         list branches
   branch get <name>                   retrieve a branch
   branch create [flags] <name>        create a branch
   branch delete|rebase|validate|merge <name>
+  branch report <name>                print branch diff report data
+  diff tree|summary <branch>          inspect branch diffs
+  object get|create|update|delete     manage schema-defined objects
+  object load|validate                load or validate object files
+  objectstore get|upload|file         manage stored content
+  repository list                     list repositories
   schema graphql                      print the branch GraphQL schema
+  schema load|check|export|list|show  manage schemas
+  task list                           list background tasks
   graphql [flags]                     execute a GraphQL document
 
 global flags:
-  -config string    TOML file (INFRAHUB_CONFIG, default user config directory)
+  -config string    TOML file (INFRAHUB_CONFIG, INFRAHUBCTL_CONFIG, default user config directory)
   -address string   Infrahub URL (INFRAHUB_ADDRESS)
   -token string     API token (INFRAHUB_API_TOKEN)
-  -branch string    branch (INFRAHUB_BRANCH, default main)`)
+  -branch string    branch (INFRAHUB_BRANCH, INFRAHUB_DEFAULT_BRANCH, default main)`)
 }
 
 func (r Runner) withDefaults() Runner {
@@ -299,6 +406,9 @@ func (r Runner) loadConfig(path string, explicitlySet bool) (sdkconfig.Config, e
 	required := explicitlySet
 	if !required {
 		path = r.Getenv(sdkconfig.EnvConfigPath)
+		if path == "" {
+			path = r.Getenv(sdkconfig.EnvConfigPathAlias)
+		}
 		required = path != ""
 	}
 	if path == "" {
