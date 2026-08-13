@@ -4,14 +4,78 @@ name: Start Release
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - "v*.*.*"
+
+permissions:
+  actions: read
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  require-ci:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Wait for CI on tagged commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+
+          api="https://api.github.com/repos/${REPOSITORY}/actions/runs?event=push&head_sha=${SHA}&per_page=100"
+          attempts=60
+          sleep_seconds=30
+
+          for attempt in $(seq 1 "${attempts}"); do
+            response="$(curl --fail --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${api}")"
+
+            run_count="$(printf '%s' "${response}" | jq '[.workflow_runs[] | select(.name == "CI" and .path == ".github/workflows/CI.yml")] | length')"
+
+            if [ "${run_count}" -eq 0 ]; then
+              echo "No CI run found yet for ${SHA}; attempt ${attempt}/${attempts}."
+              sleep "${sleep_seconds}"
+              continue
+            fi
+
+            status="$(printf '%s' "${response}" | jq -r '[.workflow_runs[] | select(.name == "CI" and .path == ".github/workflows/CI.yml")] | sort_by(.run_number) | last | .status')"
+            conclusion="$(printf '%s' "${response}" | jq -r '[.workflow_runs[] | select(.name == "CI" and .path == ".github/workflows/CI.yml")] | sort_by(.run_number) | last | .conclusion')"
+            html_url="$(printf '%s' "${response}" | jq -r '[.workflow_runs[] | select(.name == "CI" and .path == ".github/workflows/CI.yml")] | sort_by(.run_number) | last | .html_url')"
+
+            echo "CI status: ${status}, conclusion: ${conclusion}, url: ${html_url}"
+
+            if [ "${status}" = "completed" ] && [ "${conclusion}" = "success" ]; then
+              exit 0
+            fi
+
+            if [ "${status}" = "completed" ]; then
+              echo "::error::CI did not succeed for ${SHA}. See ${html_url}"
+              exit 1
+            fi
+
+            sleep "${sleep_seconds}"
+          done
+
+          echo "::error::Timed out waiting for CI to succeed for ${SHA}."
+          exit 1
+
   release:
+    needs: require-ci
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
