@@ -69,9 +69,14 @@ func newRootCommand(ctx context.Context, runner Runner) *cobra.Command {
 	return root
 }
 
-func (s *commandState) prepareClient(command *cobra.Command, _ []string) error {
+func (s *commandState) prepareClient(command *cobra.Command, args []string) error {
 	if command == command.Root() || command.Name() == "help" || command.Annotations[offlineCommand] == "true" {
 		return nil
+	}
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			return nil
+		}
 	}
 	settings, err := s.runner.loadConfig(s.configPath, command.Root().PersistentFlags().Changed("config"))
 	if err != nil {
