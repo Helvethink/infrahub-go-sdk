@@ -7,13 +7,14 @@ import (
 	"io"
 	"os"
 
-	infrahub "github.com/Helvethink/infrahub-go-sdk"
 	"github.com/spf13/viper"
+
+	infrahub "github.com/Helvethink/infrahub-go-sdk"
 )
 
 const (
 	EnvAddress       = "INFRAHUB_ADDRESS"
-	EnvAPIToken      = "INFRAHUB_API_TOKEN"
+	EnvAPIToken      = "INFRAHUB_API_TOKEN" // #nosec G101 -- This is an environment variable name, not a credential.
 	EnvDefaultBranch = "INFRAHUB_BRANCH"
 	EnvConfigPath    = "INFRAHUB_CONFIG"
 	EnvLogLevel      = "INFRAHUB_LOG_LEVEL"

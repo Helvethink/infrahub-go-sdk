@@ -25,7 +25,7 @@ log_level = "info"
 
 func TestDecodeRejectsUnknownFields(t *testing.T) {
 	t.Parallel()
-	if _, err := config.Decode(strings.NewReader(`adress = "typo"`)); err == nil {
+	if _, err := config.Decode(strings.NewReader(`unknown_key = "typo"`)); err == nil {
 		t.Fatal("Decode() error = nil")
 	}
 }
