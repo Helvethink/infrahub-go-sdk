@@ -1,7 +1,7 @@
 # Infrahub Go SDK
 
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/Helvethink/infrahub-go-sdk)](https://pkg.go.dev/mod/github.com/Helvethink/infrahub-go-sdk)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Helvethink/infrahub-go-sdk)](https://goreportcard.com/report/github.com/Helvethink/infrahub-go-sdk)
+[![Maintainability](https://qlty.sh/badges/8e26fe2e-336b-46d0-880f-00fbed695556/maintainability.svg)](https://qlty.sh/gh/Helvethink/projects/infrahub-go-sdk)
 [![Docker Pulls](https://badgen.net/docker/pulls/helvethink/infrahub-go-sdk?icon=docker&label=pulls)](https://hub.docker.com/r/helvethink/infrahub-go-sdk/)
 [![Docker Stars](https://badgen.net/docker/stars/helvethink/infrahub-go-sdk?icon=docker&label=stars)](https://hub.docker.com/r/helvethink/infrahub-go-sdk/)
 [![test](https://github.com/Helvethink/infrahub-go-sdk/actions/workflows/CI.yml/badge.svg)](https://github.com/Helvethink/infrahub-go-sdk/actions/workflows/CI.yml)
@@ -86,13 +86,17 @@ export INFRAHUB_API_TOKEN=...
 
 infrahubctl branch list
 infrahubctl branch create --description "SDK work" sdk-work
+infrahubctl object validate objects/
+infrahubctl object load objects/ --branch sdk-work
+infrahubctl task list --state running --limit 10
+infrahubctl repository list
 infrahubctl schema graphql > schema.graphql
 printf 'query { Branch { name } }' | infrahubctl graphql
 ```
 
-Run `infrahubctl help` for the complete initial command list.
+Run `infrahubctl help` for the complete command list.
 
-TOML configuration is also supported from the platform user configuration directory, `INFRAHUB_CONFIG`, or `-config`. See the [configuration guide](docs/configuration.md) for the file format and precedence rules.
+TOML configuration is also supported from the platform user configuration directory, `INFRAHUB_CONFIG`, `INFRAHUBCTL_CONFIG`, or `-config`. See the [configuration guide](docs/configuration.md) for the file format and precedence rules.
 
 ## Dynamic GraphQL
 

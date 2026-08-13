@@ -22,6 +22,25 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | tracking/group context | Available | `tracking.WithTracker`, `tracking.Group` |
 | repositories | Available | `Client.Repositories` and `pkg/repository` |
 | Jinja transforms/generators/checks | Go-native | `Client.Automation` and `pkg/automation` extension points |
-| `infrahubctl` core commands | Available | `cmd/infrahubctl` |
+| `infrahubctl` core commands | Partial | `cmd/infrahubctl` |
+
+## `infrahubctl` command compatibility
+
+The Python CLI command list was checked against the Infrahub documentation in August 2026. The Go CLI implements commands where the Go SDK has an equivalent native service and avoids pretending to support Python runtime features.
+
+| Python `infrahubctl` command | Go status |
+| --- | --- |
+| `branch list/get/create/delete/rebase/validate/merge/report` | Available |
+| `graphql` | Available |
+| `info` | Available |
+| `object get/create/update/delete/load/validate` | Available |
+| `repository list` | Available |
+| `schema graphql/load/check/export/list/show` | Available |
+| `task list` | Available |
+| `version` | Available |
+| `check`, `generator`, `render`, `run`, `transform` | Not ported; Python-runtime/Jinja execution is intentionally not embedded in the Go CLI |
+| `dump`, `load`, `menu`, `marketplace`, `protocols`, `telemetry`, `validate` | Not ported yet; these need dedicated server contracts or local file-format implementations before exposing stable Go commands |
+
+The Go CLI accepts Python-compatible configuration aliases for day-to-day migration: `server_address` in TOML, `INFRAHUB_DEFAULT_BRANCH`, and `INFRAHUBCTL_CONFIG`.
 
 Compatibility means equivalent server behavior where practical. It does not imply identical names, mutable node objects, separate sync/async clients, Python decorators, or runtime code loading.

@@ -64,6 +64,29 @@ func TestCreateAndDeleteUseGeneratedInputTypes(t *testing.T) {
 	}
 }
 
+func TestUpsertUsesGeneratedInputType(t *testing.T) {
+	t.Parallel()
+	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		var request payload
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		if request.OperationName != "BuiltinTagUpsert" {
+			t.Errorf("operation = %q", request.OperationName)
+		}
+		if !strings.Contains(request.Query, "$data: BuiltinTagUpsertInput!") {
+			t.Errorf("query = %s", request.Query)
+		}
+		_, _ = w.Write([]byte(`{"data":{"BuiltinTagUpsert":{"ok":true,"object":{"id":"tag-id","kind":"BuiltinTag","hfid":["staging"],"display_label":"staging"}}}}`))
+	})
+	defer server.Close()
+	upserted, err := service.Upsert(context.Background(), "BuiltinTag", map[string]any{"name": map[string]any{"value": "staging"}}, "")
+	if err != nil || upserted.ID != "tag-id" {
+		t.Fatalf("Upsert() = %#v, %v", upserted, err)
+	}
+}
+
 func TestListGetAndNotFound(t *testing.T) {
 	t.Parallel()
 	var found atomic.Bool

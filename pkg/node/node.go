@@ -103,6 +103,11 @@ func (s *Service) Update(ctx context.Context, kind string, data map[string]any, 
 	return s.mutate(ctx, kind, "Update", data, branch)
 }
 
+// Upsert creates or updates a node of kind using its generated GraphQL input type.
+func (s *Service) Upsert(ctx context.Context, kind string, data map[string]any, branch string) (*Node, error) {
+	return s.mutate(ctx, kind, "Upsert", data, branch)
+}
+
 // Delete deletes a node of kind. Data usually contains id or hfid.
 func (s *Service) Delete(ctx context.Context, kind string, data map[string]any, branch string) error {
 	if err := validateKind(kind); err != nil {

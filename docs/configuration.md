@@ -1,6 +1,6 @@
 # Configuration
 
-The SDK can be configured directly with Go options or through the `pkg/config` package. The `infrahubctl` command supports TOML, environment variables, and flags.
+The SDK can be configured directly with Go options or through the `pkg/config` package. The `infrahubctl` command uses Viper for TOML loading and supports environment variables and flags.
 
 ## TOML file
 
@@ -16,6 +16,8 @@ api_token = "replace-me"
 default_branch = "main"
 ```
 
+For migration from the Python `infrahubctl`, `server_address` is accepted as an alias for `address`.
+
 Unknown TOML keys are rejected so configuration typos fail early. When the file contains an API token, restrict its permissions to the current user.
 
 Select another file with either:
@@ -23,6 +25,7 @@ Select another file with either:
 ```sh
 infrahubctl -config ./infrahub.toml branch list
 export INFRAHUB_CONFIG=./infrahub.toml
+export INFRAHUBCTL_CONFIG=./infrahub.toml
 ```
 
 An explicitly selected file must exist. The default file is optional.
@@ -33,6 +36,7 @@ An explicitly selected file must exist. The default file is optional.
 export INFRAHUB_ADDRESS=https://infrahub.example.com
 export INFRAHUB_API_TOKEN=replace-me
 export INFRAHUB_BRANCH=main
+export INFRAHUB_DEFAULT_BRANCH=main
 ```
 
 Environment variables override values from TOML. Explicit CLI flags override both:
@@ -58,3 +62,7 @@ client, err := settings.NewClient()
 ```
 
 Applications that do not need file-based configuration can continue using `infrahub.NewClient` and functional options directly.
+
+## Implementation dependency
+
+Configuration loading uses Viper because the Go standard library does not parse TOML and Viper provides an extensible configuration boundary for the CLI. Each load uses an isolated Viper instance; package-global Viper state is not used. Viper is pinned in `go.mod`, uses the MIT license, and its additional transitive dependency cost is accepted for the command configuration layer.

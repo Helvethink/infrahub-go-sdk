@@ -8,7 +8,7 @@ import (
 	"os"
 
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
-	"github.com/pelletier/go-toml/v2"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -16,13 +16,17 @@ const (
 	EnvAPIToken      = "INFRAHUB_API_TOKEN"
 	EnvDefaultBranch = "INFRAHUB_BRANCH"
 	EnvConfigPath    = "INFRAHUB_CONFIG"
+
+	EnvDefaultBranchAlias = "INFRAHUB_DEFAULT_BRANCH"
+	EnvConfigPathAlias    = "INFRAHUBCTL_CONFIG"
 )
 
 // Config contains connection settings shared by the SDK and infrahubctl.
 type Config struct {
-	Address       string `toml:"address"`
-	APIToken      string `toml:"api_token"`
-	DefaultBranch string `toml:"default_branch"`
+	Address       string `mapstructure:"address"`
+	ServerAddress string `mapstructure:"server_address"`
+	APIToken      string `mapstructure:"api_token"`
+	DefaultBranch string `mapstructure:"default_branch"`
 }
 
 // Load reads a strict TOML configuration file from path.
@@ -41,9 +45,17 @@ func Load(path string) (Config, error) {
 
 // Decode reads strict TOML configuration from reader.
 func Decode(reader io.Reader) (Config, error) {
-	var result Config
-	if err := toml.NewDecoder(reader).DisallowUnknownFields().Decode(&result); err != nil {
+	loader := viper.New()
+	loader.SetConfigType("toml")
+	if err := loader.ReadConfig(reader); err != nil {
 		return Config{}, fmt.Errorf("decode TOML: %w", err)
+	}
+	var result Config
+	if err := loader.UnmarshalExact(&result); err != nil {
+		return Config{}, fmt.Errorf("decode TOML: %w", err)
+	}
+	if result.Address == "" {
+		result.Address = result.ServerAddress
 	}
 	return result, nil
 }
@@ -61,6 +73,8 @@ func (c Config) ApplyEnvironment(getenv func(string) string) Config {
 		c.APIToken = value
 	}
 	if value := getenv(EnvDefaultBranch); value != "" {
+		c.DefaultBranch = value
+	} else if value := getenv(EnvDefaultBranchAlias); value != "" {
 		c.DefaultBranch = value
 	}
 	return c
