@@ -1,6 +1,6 @@
 # Configuration
 
-The SDK can be configured directly with Go options or through the `pkg/config` package. The `infrahubctl` command uses Viper for TOML loading and supports environment variables and flags.
+The SDK can be configured directly with Go options or through the `pkg/config` package. The `infrahubctl` command uses Cobra and pflag for its command tree and Viper for configuration. It supports TOML, environment variables, and flags.
 
 ## TOML file
 
@@ -65,4 +65,4 @@ Applications that do not need file-based configuration can continue using `infra
 
 ## Implementation dependency
 
-Configuration loading uses Viper because the Go standard library does not parse TOML and Viper provides an extensible configuration boundary for the CLI. Each load uses an isolated Viper instance; package-global Viper state is not used. Viper is pinned in `go.mod`, uses the MIT license, and its additional transitive dependency cost is accepted for the command configuration layer.
+Configuration loading uses Viper because the Go standard library does not parse TOML and Viper provides an extensible configuration boundary for the CLI. Each load uses an isolated Viper instance; package-global Viper state is not used. Cobra supplies the nested command tree and pflag supplies repeatable and interspersed flags. The dependencies are pinned in `go.mod`; Viper uses the MIT license and Cobra uses Apache-2.0. Their additional transitive cost is accepted for the command configuration and parsing layer.
