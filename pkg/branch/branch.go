@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
@@ -43,8 +40,6 @@ type Branch struct {
 // Client is the minimal protocol required by Service.
 type Client interface {
 	Execute(context.Context, api.GraphQLRequest, any) error
-	Endpoint(string, url.Values) *url.URL
-	Do(context.Context, string, *url.URL, io.Reader, http.Header, string) ([]byte, error)
 }
 
 // Service manages Infrahub branches.
@@ -152,21 +147,54 @@ func (s *Service) simpleMutation(ctx context.Context, operation, name string) er
 	return nil
 }
 
-// DiffData returns the raw branch diff data REST payload.
+// DiffData returns the raw branch DiffTree GraphQL payload.
+// Callers that prefer a typed result can use diff.Service.Tree.
 func (s *Service) DiffData(ctx context.Context, branch string, branchOnly bool, from, to string, dst any) error {
-	query := url.Values{"branch": {branch}, "branch_only": {fmt.Sprintf("%t", branchOnly)}}
-	if from != "" {
-		query.Set("time_from", from)
+	if branch == "" {
+		return fmt.Errorf("infrahub: diff branch must not be empty")
 	}
-	if to != "" {
-		query.Set("time_to", to)
+	if dst == nil {
+		return fmt.Errorf("infrahub: diff destination must not be nil")
 	}
-	body, err := s.client.Do(ctx, http.MethodGet, s.client.Endpoint("api/diff/data", query), nil, nil, "")
+	var response struct {
+		Tree json.RawMessage `json:"DiffTree"`
+	}
+	err := s.client.Execute(ctx, api.GraphQLRequest{
+		Query: `query BranchDiffData($branch: String!, $fromTime: DateTime, $toTime: DateTime, $includeParents: Boolean!) {
+			DiffTree(branch: $branch, from_time: $fromTime, to_time: $toTime, include_parents: $includeParents) {
+				name from_time to_time base_branch diff_branch num_added num_updated num_removed num_conflicts
+				num_untracked_base_changes num_untracked_diff_changes
+				nodes {
+					uuid kind status label num_added num_updated num_removed
+					attributes { name status num_added num_updated num_removed }
+					relationships {
+						name status cardinality num_added num_updated num_removed
+						elements { status num_added num_updated num_removed }
+					}
+				}
+			}
+		}`,
+		Variables: map[string]any{
+			"branch": branch, "fromTime": nullableDiffValue(from), "toTime": nullableDiffValue(to),
+			"includeParents": !branchOnly,
+		},
+		OperationName: "BranchDiffData", Branch: branch, Tracker: "query-branch-diff-data",
+	}, &response)
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(body, dst); err != nil {
+	if len(response.Tree) == 0 || string(response.Tree) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(response.Tree, dst); err != nil {
 		return fmt.Errorf("infrahub: decode diff data: %w", err)
 	}
 	return nil
+}
+
+func nullableDiffValue(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }

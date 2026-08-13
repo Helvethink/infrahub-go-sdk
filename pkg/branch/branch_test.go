@@ -86,3 +86,43 @@ func TestMutationsUseServerInputTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestDiffDataUsesDiffTreeGraphQL(t *testing.T) {
+	t.Parallel()
+	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.EscapedPath() != "/graphql/feature%2Fone" {
+			t.Errorf("request = %s %s", r.Method, r.URL.String())
+		}
+		var request payload
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.OperationName != "BranchDiffData" || !strings.Contains(request.Query, "DiffTree(") {
+			t.Errorf("request = %#v", request)
+		}
+		if request.Variables["branch"] != "feature/one" || request.Variables["includeParents"] != false || request.Variables["fromTime"] != "2026-08-01T00:00:00Z" || request.Variables["toTime"] != nil {
+			t.Errorf("variables = %#v", request.Variables)
+		}
+		_, _ = w.Write([]byte(`{"data":{"DiffTree":{"num_added":1,"diff_branch":"feature/one","nodes":[]}}}`))
+	})
+	defer server.Close()
+
+	var result map[string]any
+	if err := service.DiffData(context.Background(), "feature/one", true, "2026-08-01T00:00:00Z", "", &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["diff_branch"] != "feature/one" || result["num_added"] != float64(1) {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestDiffDataValidatesArguments(t *testing.T) {
+	t.Parallel()
+	service := NewService(nil)
+	if err := service.DiffData(context.Background(), "", false, "", "", &map[string]any{}); err == nil {
+		t.Fatal("empty branch error = nil")
+	}
+	if err := service.DiffData(context.Background(), "feature", false, "", "", nil); err == nil {
+		t.Fatal("nil destination error = nil")
+	}
+}
