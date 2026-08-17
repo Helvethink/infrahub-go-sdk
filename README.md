@@ -62,6 +62,10 @@ See the [Python SDK porting map](docs/compatibility.md) for implemented and plan
 
 ## Development
 
+Community contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+the development workflow, coding guidelines, test requirements, and pull
+request checklist.
+
 ```sh
 make check
 make race
