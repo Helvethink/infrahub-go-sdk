@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/tracking"
@@ -278,5 +280,93 @@ func TestGraphQLTypeValidation(t *testing.T) {
 		if isGraphQLType(value) {
 			t.Errorf("isGraphQLType(%q) = true", value)
 		}
+	}
+}
+
+func TestInferGraphQLTypes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		value   any
+		want    string
+		wantErr bool
+	}{
+		{name: "string", value: "value", want: "String!"},
+		{name: "boolean", value: true, want: "Boolean!"},
+		{name: "int", value: int(1), want: "Int!"},
+		{name: "int8", value: int8(1), want: "Int!"},
+		{name: "int16", value: int16(1), want: "Int!"},
+		{name: "int32", value: int32(1), want: "Int!"},
+		{name: "int64", value: int64(1), want: "Int!"},
+		{name: "float32", value: float32(1.5), want: "Float!"},
+		{name: "float64", value: 1.5, want: "Float!"},
+		{name: "JSON integer", value: json.Number("42"), want: "Int!"},
+		{name: "JSON float", value: json.Number("4.2"), want: "Float!"},
+		{name: "invalid JSON number", value: json.Number("invalid"), wantErr: true},
+		{name: "time", value: time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC), want: "DateTime!"},
+		{name: "strings", value: []string{"one"}, want: "[String!]!"},
+		{name: "booleans", value: []bool{true}, want: "[Boolean!]!"},
+		{name: "integers", value: []int{1, 2}, want: "[Int!]!"},
+		{name: "floats", value: []float64{1.5}, want: "[Float!]!"},
+		{name: "oversized integer list", value: []int{math.MaxInt32 + 1}, wantErr: true},
+		{name: "unsupported", value: struct{}{}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := inferGraphQLType(tt.value)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("inferGraphQLType(%T) error = nil", tt.value)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("inferGraphQLType(%T) = %q, %v; want %q", tt.value, got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestUpdateAndOperationFailures(t *testing.T) {
+	t.Parallel()
+	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		var request payload
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		switch request.OperationName {
+		case "BuiltinTagUpdate":
+			_, _ = w.Write([]byte(`{"data":{"BuiltinTagUpdate":{"ok":true,"object":{"id":"tag-id","kind":"BuiltinTag"}}}}`))
+		case "BuiltinTagCreate":
+			_, _ = w.Write([]byte(`{"data":{"BuiltinTagCreate":{"ok":false,"object":null}}}`))
+		case "BuiltinTagDelete":
+			_, _ = w.Write([]byte(`{"data":{"BuiltinTagDelete":{"ok":false}}}`))
+		}
+	})
+	defer server.Close()
+	updated, err := service.Update(context.Background(), "BuiltinTag", map[string]any{"id": "tag-id"}, "main")
+	if err != nil || updated.ID != "tag-id" {
+		t.Fatalf("Update() = %#v, %v", updated, err)
+	}
+	if _, err := service.Create(context.Background(), "BuiltinTag", nil, "main"); err == nil {
+		t.Fatal("Create() operation error = nil")
+	}
+	if err := service.Delete(context.Background(), "BuiltinTag", nil, "main"); err == nil {
+		t.Fatal("Delete() operation error = nil")
+	}
+	if _, err := service.GetByID(context.Background(), "BuiltinTag", "", "main"); err == nil {
+		t.Fatal("GetByID() empty ID error = nil")
+	}
+	if _, err := service.GetByHFID(context.Background(), "BuiltinTag", nil, "main"); err == nil {
+		t.Fatal("GetByHFID() empty HFID error = nil")
+	}
+}
+
+func TestNodeUnmarshalRejectsMalformedJSON(t *testing.T) {
+	t.Parallel()
+	var value Node
+	if err := json.Unmarshal([]byte("not-json"), &value); err == nil {
+		t.Fatal("Unmarshal() error = nil")
 	}
 }

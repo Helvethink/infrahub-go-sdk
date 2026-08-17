@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
@@ -174,5 +175,44 @@ func TestRequiredIdentifiers(t *testing.T) {
 		if err := check(); err == nil {
 			t.Fatal("validation error = nil")
 		}
+	}
+}
+
+func TestUploadRequiresCompleteResponse(t *testing.T) {
+	t.Parallel()
+	service, server := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"identifier":"storage-id"}`))
+	})
+	defer server.Close()
+	if _, err := service.Upload(context.Background(), "content"); err == nil || !strings.Contains(err.Error(), "missing identifier or checksum") {
+		t.Fatalf("Upload() error = %v", err)
+	}
+}
+
+func TestFileRejectsMalformedContentType(t *testing.T) {
+	t.Parallel()
+	service, server := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "invalid;")
+		_, _ = w.Write([]byte("content"))
+	})
+	defer server.Close()
+	_, err := service.GetFileByID(context.Background(), "file-id")
+	var contentTypeError *objectstore.UnsupportedContentTypeError
+	if !errors.As(err, &contentTypeError) || !strings.Contains(contentTypeError.Error(), "file-id") {
+		t.Fatalf("error = %T %v", err, err)
+	}
+}
+
+func TestUploadAndFilePropagateHTTPError(t *testing.T) {
+	t.Parallel()
+	service, server := newService(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	})
+	defer server.Close()
+	if _, err := service.Upload(context.Background(), "content"); err == nil {
+		t.Fatal("Upload() HTTP error = nil")
+	}
+	if _, err := service.GetFileByID(context.Background(), "file-id"); err == nil {
+		t.Fatal("GetFileByID() HTTP error = nil")
 	}
 }

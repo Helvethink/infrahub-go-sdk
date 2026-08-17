@@ -178,3 +178,73 @@ func TestUpdateCommitValidatesRequiredValues(t *testing.T) {
 		t.Fatal("empty commit error = nil")
 	}
 }
+
+func TestListDiscoveryAndBranchErrors(t *testing.T) {
+	t.Parallel()
+	sentinel := errors.New("query failed")
+	service := repository.NewService(executorFunc(func(context.Context, api.GraphQLRequest, any) error { return sentinel }))
+	if _, err := service.List(context.Background(), repository.ListOptions{}); !errors.Is(err, sentinel) {
+		t.Fatalf("branch discovery error = %v", err)
+	}
+	service = repository.NewService(executorFunc(func(_ context.Context, request api.GraphQLRequest, dst any) error {
+		if request.OperationName != "RepositoryBranches" {
+			t.Fatalf("operation = %q", request.OperationName)
+		}
+		return decodeInto(dst, `{"Branch":[]}`)
+	}))
+	result, err := service.List(context.Background(), repository.ListOptions{})
+	if err != nil || result == nil || len(result) != 0 {
+		t.Fatalf("empty List() = %#v, %v", result, err)
+	}
+	service = repository.NewService(executorFunc(func(context.Context, api.GraphQLRequest, any) error { return sentinel }))
+	if _, err := service.List(context.Background(), repository.ListOptions{Branches: []string{"main", "staging"}, Concurrency: 1}); !errors.Is(err, sentinel) || !strings.Contains(err.Error(), "list repositories on branch") {
+		t.Fatalf("branch query error = %v", err)
+	}
+}
+
+func TestRepositoryWithoutStagingBranch(t *testing.T) {
+	t.Parallel()
+	value := repository.Repository{Branches: map[string]repository.BranchState{"main": {InternalStatus: "active"}}}
+	if branch, ok := value.StagingBranch(); ok || branch != "" {
+		t.Fatalf("StagingBranch() = %q, %t", branch, ok)
+	}
+}
+
+func TestListRepositoryKinds(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"CoreRepository", "CoreReadOnlyRepository"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			service := repository.NewService(executorFunc(func(_ context.Context, request api.GraphQLRequest, dst any) error {
+				if request.OperationName != "List"+kind {
+					t.Fatalf("operation = %q", request.OperationName)
+				}
+				return decodeInto(dst, `{"`+kind+`":{"count":0,"edges":[]}}`)
+			}))
+			result, err := service.List(context.Background(), repository.ListOptions{Branches: []string{"main"}, Kind: kind})
+			if err != nil || len(result) != 0 {
+				t.Fatalf("List() = %#v, %v", result, err)
+			}
+		})
+	}
+}
+
+func TestUpdateCommitExecutionErrors(t *testing.T) {
+	t.Parallel()
+	sentinel := errors.New("partial GraphQL failure")
+	service := repository.NewService(executorFunc(func(_ context.Context, _ api.GraphQLRequest, dst any) error {
+		if err := decodeInto(dst, `{"CoreRepositoryUpdate":{"ok":true,"object":{"commit":{"value":"confirmed"}}}}`); err != nil {
+			t.Fatal(err)
+		}
+		return sentinel
+	}))
+	commit, err := service.UpdateCommit(context.Background(), repository.UpdateCommitOptions{RepositoryID: "repo-id", Commit: "requested"})
+	if !errors.Is(err, sentinel) || commit != "confirmed" {
+		t.Fatalf("UpdateCommit() = %q, %v", commit, err)
+	}
+	service = repository.NewService(executorFunc(func(context.Context, api.GraphQLRequest, any) error { return sentinel }))
+	commit, err = service.UpdateCommit(context.Background(), repository.UpdateCommitOptions{RepositoryID: "repo-id", Commit: "requested"})
+	if !errors.Is(err, sentinel) || commit != "" {
+		t.Fatalf("UpdateCommit() without object = %q, %v", commit, err)
+	}
+}

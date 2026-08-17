@@ -3,6 +3,7 @@ package branch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,19 @@ import (
 
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
+
+type executorFunc func(context.Context, api.GraphQLRequest, any) error
+
+func (fn executorFunc) Execute(ctx context.Context, request api.GraphQLRequest, dst any) error {
+	return fn(ctx, request, dst)
+}
+
+func decodeResult(t *testing.T, data string, dst any) {
+	t.Helper()
+	if err := json.Unmarshal([]byte(data), dst); err != nil {
+		t.Fatal(err)
+	}
+}
 
 type payload struct {
 	Query         string         `json:"query"`
@@ -124,5 +138,92 @@ func TestDiffDataValidatesArguments(t *testing.T) {
 	}
 	if err := service.DiffData(context.Background(), "feature", false, "", "", nil); err == nil {
 		t.Fatal("nil destination error = nil")
+	}
+}
+
+func TestGetSuccessNotFoundAndTransportError(t *testing.T) {
+	t.Parallel()
+	service := NewService(executorFunc(func(_ context.Context, request api.GraphQLRequest, dst any) error {
+		if request.OperationName != "BranchGet" || request.Variables["name"] != "work" {
+			t.Fatalf("request = %#v", request)
+		}
+		decodeResult(t, `{"Branch":[{"id":"branch-id","name":"work","status":"OPEN"}]}`, dst)
+		return nil
+	}))
+	branch, err := service.Get(context.Background(), "work")
+	if err != nil || branch.Name != "work" {
+		t.Fatalf("Get() = %#v, %v", branch, err)
+	}
+	service = NewService(executorFunc(func(context.Context, api.GraphQLRequest, any) error { return nil }))
+	if _, err := service.Get(context.Background(), "missing"); err == nil {
+		t.Fatal("Get() not-found error = nil")
+	}
+	sentinel := errors.New("transport failed")
+	service = NewService(executorFunc(func(context.Context, api.GraphQLRequest, any) error { return sentinel }))
+	if _, err := service.Get(context.Background(), "work"); !errors.Is(err, sentinel) {
+		t.Fatalf("Get() error = %v", err)
+	}
+}
+
+func TestCreateAndSimpleMutationFailures(t *testing.T) {
+	t.Parallel()
+	service := NewService(executorFunc(func(_ context.Context, request api.GraphQLRequest, dst any) error {
+		switch request.OperationName {
+		case "BranchCreate":
+			decodeResult(t, `{"BranchCreate":{"ok":false,"object":null}}`, dst)
+		case "BranchMerge":
+			decodeResult(t, `{"BranchMerge":{"ok":false}}`, dst)
+		}
+		return nil
+	}))
+	if _, err := service.Create(context.Background(), "work", CreateOptions{}); err == nil {
+		t.Fatal("Create() operation error = nil")
+	}
+	if err := service.Merge(context.Background(), "work"); err == nil {
+		t.Fatal("Merge() operation error = nil")
+	}
+	sentinel := errors.New("GraphQL failed")
+	service = NewService(executorFunc(func(_ context.Context, request api.GraphQLRequest, dst any) error {
+		if request.OperationName == "BranchCreate" {
+			decodeResult(t, `{"BranchCreate":{"ok":true,"object":{"id":"branch-id","name":"work"}}}`, dst)
+		}
+		return sentinel
+	}))
+	created, err := service.Create(context.Background(), "work", CreateOptions{})
+	if !errors.Is(err, sentinel) || created == nil || created.ID != "branch-id" {
+		t.Fatalf("Create() = %#v, %v", created, err)
+	}
+	if err := service.Delete(context.Background(), "work"); !errors.Is(err, sentinel) {
+		t.Fatalf("Delete() error = %v", err)
+	}
+}
+
+func TestDiffDataResponseEdges(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		response string
+		err      error
+		wantErr  bool
+	}{
+		{name: "null tree", response: `{"DiffTree":null}`},
+		{name: "malformed destination", response: `{"DiffTree":"not-an-object"}`, wantErr: true},
+		{name: "transport", err: errors.New("transport failed"), wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			service := NewService(executorFunc(func(_ context.Context, _ api.GraphQLRequest, dst any) error {
+				if tt.response != "" {
+					decodeResult(t, tt.response, dst)
+				}
+				return tt.err
+			}))
+			var result map[string]any
+			err := service.DiffData(context.Background(), "work", false, "", "", &result)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("DiffData() error = %v, wantErr %t", err, tt.wantErr)
+			}
+		})
 	}
 }

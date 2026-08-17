@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Helvethink/infrahub-go-sdk/internal/requestcontext"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 	"github.com/Helvethink/infrahub-go-sdk/pkg/tracking"
 )
@@ -113,10 +114,47 @@ func TestNewGroupValidatesInput(t *testing.T) {
 		{},
 		{Identifier: "valid", GroupKind: "Kind) { secret"},
 		{Identifier: "valid", GroupFields: map[string]any{"members": []string{"override"}}},
+		{Identifier: "valid", GroupFields: map[string]any{"1invalid": true}},
+		{Identifier: "valid", GroupFields: map[string]any{"bad-name": true}},
 	}
 	for _, options := range tests {
 		if _, err := tracking.NewGroup(options); err == nil {
 			t.Fatalf("NewGroup(%#v) error = nil", options)
 		}
+	}
+}
+
+func TestTrackerAndGroupContext(t *testing.T) {
+	t.Parallel()
+	ctx := tracking.WithTracker(context.Background(), "workflow")
+	if tracker, ok := requestcontext.Tracker(ctx); !ok || tracker != "workflow" {
+		t.Fatalf("tracker = %q, %t", tracker, ok)
+	}
+	group, err := tracking.NewGroup(tracking.GroupOptions{Identifier: "workflow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestcontext.RecordNodeIDs(group.Context(context.Background()), "node-id")
+	if got := group.Members(); !reflect.DeepEqual(got, []string{"node-id"}) {
+		t.Fatalf("members = %#v", got)
+	}
+}
+
+func TestSaveReturnsPartialObjectWithExecutionError(t *testing.T) {
+	t.Parallel()
+	group, err := tracking.NewGroup(tracking.GroupOptions{Identifier: "partial"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	group.RecordNodeIDs("node-id")
+	sentinel := errors.New("partial GraphQL failure")
+	result, err := group.Save(context.Background(), executorFunc(func(_ context.Context, _ api.GraphQLRequest, dst any) error {
+		if decodeErr := json.Unmarshal([]byte(`{"CoreStandardGroupUpsert":{"ok":true,"object":{"id":"group-id","kind":"CoreStandardGroup"}}}`), dst); decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		return sentinel
+	}))
+	if !errors.Is(err, sentinel) || result == nil || result.ID != "group-id" {
+		t.Fatalf("Save() = %#v, %v", result, err)
 	}
 }
