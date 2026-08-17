@@ -169,3 +169,147 @@ func TestPrepareMenuItemDerivesDefaults(t *testing.T) {
 		t.Fatalf("item = %#v", item)
 	}
 }
+
+func TestTelemetryListAndExport(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/telemetry/snapshots" {
+			t.Errorf("path = %q", request.URL.Path)
+		}
+		query := request.URL.Query()
+		if query.Get("start_date") != "2026-08-01T00:00:00Z" || query.Get("end_date") != "2026-08-02T00:00:00Z" {
+			t.Errorf("query = %q", request.URL.RawQuery)
+		}
+		_, _ = writer.Write([]byte(`{"snapshots":[{"metric":"value"}],"count":1}`))
+	}))
+	defer server.Close()
+	directory := t.TempDir()
+	out := filepath.Join(directory, "telemetry.json")
+	var stdout, stderr bytes.Buffer
+	runner := testRunner(&stdout, &stderr)
+	code := runner.Run(context.Background(), []string{
+		"-address", server.URL, "telemetry", "list",
+		"--start", "2026-08-01T00:00:00Z", "--end", "2026-08-02T00:00:00Z", "--limit", "1",
+	})
+	if code != 0 || !strings.Contains(stdout.String(), `"metric": "value"`) {
+		t.Fatalf("list code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = runner.Run(context.Background(), []string{
+		"-address", server.URL, "telemetry", "export", "--start", "2026-08-01T00:00:00Z",
+		"--end", "2026-08-02T00:00:00Z", "--out", out,
+	})
+	data, err := os.ReadFile(out)
+	if code != 0 || err != nil || !strings.Contains(string(data), `"metric": "value"`) {
+		t.Fatalf("export code=%d data=%q readErr=%v stderr=%q", code, data, err, stderr.String())
+	}
+}
+
+func TestTelemetryValidationErrors(t *testing.T) {
+	t.Parallel()
+	tests := [][]string{
+		{"-address", "https://example.com", "telemetry", "list", "--start", "invalid"},
+		{"-address", "https://example.com", "telemetry", "list", "--end", "invalid"},
+		{"-address", "https://example.com", "telemetry", "unknown"},
+	}
+	for _, args := range tests {
+		var stdout, stderr bytes.Buffer
+		if code := testRunner(&stdout, &stderr).Run(context.Background(), args); code != 2 {
+			t.Errorf("args=%q code=%d stderr=%q", args, code, stderr.String())
+		}
+	}
+}
+
+func TestValidateSchemaAndGraphQLQuery(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	schemaPath := filepath.Join(directory, "schema.yaml")
+	if err := os.WriteFile(schemaPath, []byte("nodes:\n  - kind: InfraDevice\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	runner := testRunner(&stdout, &stderr)
+	if code := runner.Run(context.Background(), []string{"validate", "schema", schemaPath}); code != 0 || !strings.Contains(stdout.String(), `"valid": true`) {
+		t.Fatalf("schema code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	queryPath := filepath.Join(directory, "query.graphql")
+	if err := os.WriteFile(queryPath, []byte("query Example($enabled: Boolean!) { value }"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		payload := decodeCLIRequest(t, request)
+		if payload.Variables["enabled"] != true {
+			t.Errorf("variables = %#v", payload.Variables)
+		}
+		_, _ = writer.Write([]byte(`{"data":{"value":42}}`))
+	}))
+	defer server.Close()
+	out := filepath.Join(directory, "result.json")
+	stdout.Reset()
+	stderr.Reset()
+	code := runner.Run(context.Background(), []string{
+		"-address", server.URL, "validate", "graphql-query", queryPath,
+		"--variable", "enabled=true", "--out", out,
+	})
+	data, err := os.ReadFile(out)
+	if code != 0 || err != nil || !strings.Contains(string(data), `"value": 42`) {
+		t.Fatalf("query code=%d data=%q readErr=%v stderr=%q", code, data, err, stderr.String())
+	}
+}
+
+func TestDumpRelationshipHelpers(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{"nodes": []any{
+		map[string]any{
+			"namespace": "Infra", "name": "Device",
+			"attributes": []any{map[string]any{"name": "name"}},
+			"relationships": []any{
+				map[string]any{"name": "interfaces", "identifier": "device_interfaces", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+				map[string]any{"name": "site", "identifier": "device_site", "peer": "LocationSite", "cardinality": "one"},
+			},
+		},
+		map[string]any{"kind": "InfraInterface", "namespace": "Infra"},
+		map[string]any{"kind": "LocationSite", "namespace": "Location"},
+	}}
+	if got := schemaNodeKinds(schema, []string{"Infra"}, []string{"InfraInterface"}); !reflect.DeepEqual(got, []string{"InfraDevice"}) {
+		t.Fatalf("filtered kinds = %#v", got)
+	}
+	if got := manyRelationshipIdentifiers(schema, []string{"InfraDevice", "InfraInterface"}); !reflect.DeepEqual(got, []string{"device_interfaces"}) {
+		t.Fatalf("relationship identifiers = %#v", got)
+	}
+	names := relationshipNamesByKind(schema)
+	if names["InfraDevice\x00device_interfaces"] != "interfaces" || names["InfraDevice\x00device_site"] != "site" {
+		t.Fatalf("relationship names = %#v", names)
+	}
+	selections, err := dumpSelections(schema, "InfraDevice")
+	if err != nil || len(selections) != 3 {
+		t.Fatalf("selections=%#v err=%v", selections, err)
+	}
+	if _, err := dumpSelections(schema, "MissingKind"); err == nil {
+		t.Fatal("missing kind error = nil")
+	}
+}
+
+func TestPrepareMenuItemValidation(t *testing.T) {
+	t.Parallel()
+	if err := prepareMenuItem(map[string]any{"name": "item", "label": "Item"}, 0); err == nil {
+		t.Fatal("missing namespace error = nil")
+	}
+	item := map[string]any{
+		"namespace": "Main", "name": "parent", "label": "Parent",
+		"children": []any{map[string]any{"namespace": "Main", "name": "child", "label": "Child"}},
+	}
+	if err := prepareMenuItem(item, 0); err != nil {
+		t.Fatal(err)
+	}
+	children := item["children"].([]any)
+	if children[0].(map[string]any)["order_weight"] != 1000 {
+		t.Fatalf("children = %#v", children)
+	}
+	item["children"] = []any{"invalid"}
+	if err := prepareMenuItem(item, 0); err == nil {
+		t.Fatal("invalid child error = nil")
+	}
+}
