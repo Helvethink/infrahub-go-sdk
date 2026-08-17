@@ -313,3 +313,364 @@ func TestPrepareMenuItemValidation(t *testing.T) {
 		t.Fatal("invalid child error = nil")
 	}
 }
+
+func TestDumpExportsNodesAndRelationships(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/api/schema":
+			if request.URL.Query().Get("branch") != "feature" {
+				t.Errorf("schema branch = %q", request.URL.Query().Get("branch"))
+			}
+			_, _ = writer.Write([]byte(`{"nodes":[{"kind":"BuiltinTag","namespace":"Builtin","attributes":[{"name":"name"}]}]}`))
+		case request.Method == http.MethodPost:
+			payload := decodeCLIRequest(t, request)
+			if payload.OperationName != "QueryBuiltinTag" || !strings.Contains(payload.Query, "name { value }") {
+				t.Fatalf("query = %#v", payload)
+			}
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTag":{"count":1,"edges":[{"node":{"id":"tag-id","kind":"BuiltinTag","hfid":["tag"],"display_label":"tag","name":{"value":"tag"}}}]}}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", request.Method, request.URL)
+		}
+	}))
+	defer server.Close()
+	var stdout, stderr bytes.Buffer
+	code := testRunner(&stdout, &stderr).Run(context.Background(), []string{
+		"-address", server.URL, "dump", "--branch", "feature", "--directory", directory,
+	})
+	if code != 0 || !strings.Contains(stdout.String(), `"nodes": 1`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	nodes, err := os.ReadFile(filepath.Join(directory, "nodes.json"))
+	if err != nil || !strings.Contains(string(nodes), `"id":"tag-id"`) || !strings.Contains(string(nodes), `\"name\":{\"value\":\"tag\"}`) {
+		t.Fatalf("nodes=%q err=%v", nodes, err)
+	}
+	relationships, err := os.ReadFile(filepath.Join(directory, "relationships.json"))
+	if err != nil || strings.TrimSpace(string(relationships)) != "[]" {
+		t.Fatalf("relationships=%q err=%v", relationships, err)
+	}
+}
+
+func TestDumpRejectsUnsafeInputsAndExistingOutput(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "invalid limit", args: []string{"-address", "https://example.com", "dump", "--limit", "0"}},
+		{name: "internal namespace", args: []string{"-address", "https://example.com", "dump", "--namespace", "Internal"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var stdout, stderr bytes.Buffer
+			if code := testRunner(&stdout, &stderr).Run(context.Background(), tt.args); code != 2 {
+				t.Fatalf("code=%d stderr=%q", code, stderr.String())
+			}
+		})
+	}
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "nodes.json"), []byte("existing"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := testRunner(&stdout, &stderr).Run(context.Background(), []string{
+		"-address", "https://example.com", "dump", "--directory", directory,
+	})
+	if code != 1 || !strings.Contains(stderr.String(), "refusing to overwrite") {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestMenuLoad(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "menu.yaml")
+	if err := os.WriteFile(path, []byte("apiVersion: infrahub.app/v1\nkind: Menu\nspec:\n  kind: CoreMenuItem\n  data:\n    - namespace: Main\n      name: devices\n      label: Devices\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		payload := decodeCLIRequest(t, request)
+		if payload.OperationName != "CoreMenuItemUpsert" {
+			t.Fatalf("operation = %q", payload.OperationName)
+		}
+		_, _ = writer.Write([]byte(`{"data":{"CoreMenuItemUpsert":{"ok":true,"object":{"id":"menu-id","kind":"CoreMenuItem","hfid":["Main","devices"],"display_label":"Devices"}}}}`))
+	}))
+	defer server.Close()
+	stdout, stderr, code := runCLI(t, server, "menu", "load", path)
+	if code != 0 || !strings.Contains(stdout, `"loaded": 1`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestMarketplaceListCollectionAndDownload(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/v1/collections":
+			if request.URL.Query().Get("limit") != "2" {
+				t.Errorf("query = %q", request.URL.RawQuery)
+			}
+			_, _ = writer.Write([]byte(`{"items":[{"name":"collection"}]}`))
+		case "/api/v1/schemas/Infra/Device/download":
+			_, _ = writer.Write([]byte("schema: device\n"))
+		default:
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+	var stdout, stderr bytes.Buffer
+	runner := testRunner(&stdout, &stderr)
+	if code := runner.Run(context.Background(), []string{"marketplace", "list", "--url", server.URL, "--collection", "--limit", "2"}); code != 0 || !strings.Contains(stdout.String(), `"collection"`) {
+		t.Fatalf("list code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := filepath.Join(t.TempDir(), "device.yaml")
+	stdout.Reset()
+	stderr.Reset()
+	if code := runner.Run(context.Background(), []string{"marketplace", "get", "--url", server.URL, "--out", out, "Infra/Device"}); code != 0 {
+		t.Fatalf("get code=%d stderr=%q", code, stderr.String())
+	}
+	data, err := os.ReadFile(out)
+	if err != nil || string(data) != "schema: device\n" {
+		t.Fatalf("data=%q err=%v", data, err)
+	}
+}
+
+func TestGenerateProtocolsTypesAndErrors(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{"nodes": []any{map[string]any{
+		"namespace": "Infra", "name": "Device",
+		"attributes": []any{
+			map[string]any{"name": "enabled", "kind": "Boolean"},
+			map[string]any{"name": "created_at", "kind": "DateTime", "optional": true},
+			map[string]any{"name": "metadata", "kind": "JSON"},
+		},
+		"relationships": []any{
+			map[string]any{"name": "interfaces", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+		},
+	}}}
+	result, err := generateProtocols(schema, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"# Synchronous SDK mode requested.", "created_at: datetime | None", "enabled: bool", "metadata: Any", "interfaces: Sequence[InfraInterface] | None"} {
+		if !strings.Contains(result, expected) {
+			t.Errorf("generated source missing %q: %s", expected, result)
+		}
+	}
+	if _, err := generateProtocols(map[string]any{}, false); err == nil {
+		t.Fatal("empty schema error = nil")
+	}
+}
+
+func TestLoadRestoresExistingNodesAndRelationshipEdges(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	records := []dumpRecord{
+		{ID: "old-device", Kind: "InfraDevice", GraphQLJSON: `{"id":"old-device","kind":"InfraDevice","name":{"value":"edge-01"}}`},
+		{Kind: "BuiltinTag", GraphQLJSON: `{"name":{"value":"staging"}}`},
+	}
+	var nodes bytes.Buffer
+	encoder := json.NewEncoder(&nodes)
+	for _, record := range records {
+		if err := encoder.Encode(record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(directory, "nodes.json"), nodes.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	relationships := `[{"node":{"identifier":"device_site","peers":[{"id":"old-device","kind":"InfraDevice"},{"id":"external-site","kind":"LocationSite"}]}}]`
+	if err := os.WriteFile(filepath.Join(directory, "relationships.json"), []byte(relationships), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deviceUpserts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet && request.URL.Path == "/api/schema" {
+			_, _ = writer.Write([]byte(`{"nodes":[{"kind":"InfraDevice","relationships":[{"name":"site","identifier":"device_site"}]}]}`))
+			return
+		}
+		payload := decodeCLIRequest(t, request)
+		switch payload.OperationName {
+		case "GetInfraDeviceByID":
+			_, _ = writer.Write([]byte(`{"data":{"InfraDevice":{"count":1,"edges":[{"node":{"id":"old-device","kind":"InfraDevice","hfid":["edge-01"],"display_label":"edge-01"}}]}}}`))
+		case "InfraDeviceUpsert":
+			deviceUpserts++
+			data := payload.Variables["data"].(map[string]any)
+			if data["id"] != "old-device" {
+				t.Errorf("device data = %#v", data)
+			}
+			if deviceUpserts == 2 {
+				sites := data["site"].([]any)
+				if sites[0].(map[string]any)["id"] != "external-site" {
+					t.Errorf("sites = %#v", sites)
+				}
+			}
+			_, _ = writer.Write([]byte(`{"data":{"InfraDeviceUpsert":{"ok":true,"object":{"id":"old-device","kind":"InfraDevice","hfid":["edge-01"],"display_label":"edge-01"}}}}`))
+		case "BuiltinTagUpsert":
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTagUpsert":{"ok":true,"object":{"id":"new-tag","kind":"BuiltinTag","hfid":["staging"],"display_label":"staging"}}}}`))
+		default:
+			t.Fatalf("unexpected operation %q", payload.OperationName)
+		}
+	}))
+	defer server.Close()
+	var stdout, stderr bytes.Buffer
+	code := testRunner(&stdout, &stderr).Run(context.Background(), []string{
+		"-address", server.URL, "load", "--branch", "feature", "--directory", directory,
+	})
+	if code != 0 || deviceUpserts != 2 || !strings.Contains(stdout.String(), `"loaded": 2`) {
+		t.Fatalf("code=%d upserts=%d stdout=%q stderr=%q", code, deviceUpserts, stdout.String(), stderr.String())
+	}
+}
+
+func TestLoadInputErrors(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name          string
+		nodes         string
+		relationships string
+		want          string
+	}{
+		{name: "invalid relationships", nodes: "", relationships: "not-json", want: "decode relationships.json"},
+		{name: "invalid record", nodes: "not-json\n", relationships: "[]", want: "decode nodes.json"},
+		{name: "invalid node data", nodes: `{"id":"one","kind":"InfraDevice","graphql_json":"not-json"}` + "\n", relationships: "[]", want: "decode node"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			directory := t.TempDir()
+			if err := os.WriteFile(filepath.Join(directory, "nodes.json"), []byte(tt.nodes), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(directory, "relationships.json"), []byte(tt.relationships), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			code := testRunner(&stdout, &stderr).Run(context.Background(), []string{
+				"-address", "https://example.com", "load", "--directory", directory,
+			})
+			if code != 1 || !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("code=%d stderr=%q", code, stderr.String())
+			}
+		})
+	}
+}
+
+func TestDumpExportsManyRelationships(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			_, _ = writer.Write([]byte(`{"nodes":[{"kind":"InfraDevice","namespace":"Infra","relationships":[{"name":"interfaces","identifier":"device_interfaces","peer":"InfraInterface","cardinality":"many","optional":true}]},{"kind":"InfraInterface","namespace":"Infra"}]}`))
+			return
+		}
+		payload := decodeCLIRequest(t, request)
+		switch payload.OperationName {
+		case "QueryInfraDevice":
+			_, _ = writer.Write([]byte(`{"data":{"InfraDevice":{"count":0,"edges":[]}}}`))
+		case "QueryInfraInterface":
+			_, _ = writer.Write([]byte(`{"data":{"InfraInterface":{"count":0,"edges":[]}}}`))
+		case "":
+			identifiers := payload.Variables["relationship_identifiers"].([]any)
+			if len(identifiers) != 1 || identifiers[0] != "device_interfaces" {
+				t.Errorf("identifiers = %#v", identifiers)
+			}
+			_, _ = writer.Write([]byte(`{"data":{"Relationship":{"edges":[{"node":{"identifier":"device_interfaces","peers":[{"id":"device-id","kind":"InfraDevice"},{"id":"interface-id","kind":"InfraInterface"}]}}]}}}`))
+		default:
+			t.Fatalf("operation = %q", payload.OperationName)
+		}
+	}))
+	defer server.Close()
+	var stdout, stderr bytes.Buffer
+	code := testRunner(&stdout, &stderr).Run(context.Background(), []string{
+		"-address", server.URL, "dump", "--directory", directory, "--namespace", "Infra",
+	})
+	data, err := os.ReadFile(filepath.Join(directory, "relationships.json"))
+	if code != 0 || err != nil || !strings.Contains(string(data), "device_interfaces") {
+		t.Fatalf("code=%d relationships=%q readErr=%v stderr=%q", code, data, err, stderr.String())
+	}
+}
+
+func TestProtocolsFetchesRemoteSchemaAndWritesFile(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.URL.Path != "/api/schema" || request.URL.Query().Get("branch") != "feature" {
+			t.Fatalf("request = %s %s", request.Method, request.URL)
+		}
+		_, _ = writer.Write([]byte(`{"generics":[{"kind":"CoreArtifact","attributes":[{"name":"name","kind":"Text"}]}]}`))
+	}))
+	defer server.Close()
+	out := filepath.Join(t.TempDir(), "protocols.py")
+	var stdout, stderr bytes.Buffer
+	code := testRunner(&stdout, &stderr).Run(context.Background(), []string{
+		"-address", server.URL, "protocols", "--branch", "feature", "--out", out,
+	})
+	data, err := os.ReadFile(out)
+	if code != 0 || err != nil || !strings.Contains(string(data), "class CoreArtifact(Protocol):") {
+		t.Fatalf("code=%d source=%q readErr=%v stderr=%q", code, data, err, stderr.String())
+	}
+}
+
+func TestValidateSchemaFailures(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		data string
+		want string
+	}{
+		{name: "empty document", data: "{}\n", want: "no schema documents found"},
+		{name: "missing collections", data: "version: '1.0'\n", want: "must define nodes or generics"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "schema.yaml")
+			if err := os.WriteFile(path, []byte(tt.data), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			code := testRunner(&stdout, &stderr).Run(context.Background(), []string{"validate", "schema", path})
+			if code != 1 || !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("code=%d stderr=%q", code, stderr.String())
+			}
+		})
+	}
+}
+
+func TestPortedCommandUsageErrors(t *testing.T) {
+	t.Parallel()
+	menuPath := filepath.Join(t.TempDir(), "menu.yaml")
+	if err := os.WriteFile(menuPath, []byte("apiVersion: infrahub.app/v1\nkind: Menu\nspec:\n  data:\n    - namespace: Main\n      name: item\n      label: Item\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		run  func(Runner) int
+	}{
+		{name: "load positional argument", run: func(r Runner) int { return r.runLoad(context.Background(), nil, "main", []string{"extra"}) }},
+		{name: "menu missing arguments", run: func(r Runner) int { return r.runMenu(context.Background(), nil, "main", nil) }},
+		{name: "menu unknown command", run: func(r Runner) int { return r.runMenu(context.Background(), nil, "main", []string{"unknown", menuPath}) }},
+		{name: "telemetry missing command", run: func(r Runner) int { return r.runTelemetry(context.Background(), nil, nil) }},
+		{name: "validate missing arguments", run: func(r Runner) int { return r.runValidate(context.Background(), nil, "main", nil) }},
+		{name: "validate unknown command", run: func(r Runner) int {
+			return r.runValidate(context.Background(), nil, "main", []string{"unknown", "file"})
+		}},
+		{name: "protocols positional argument", run: func(r Runner) int { return r.runProtocols(context.Background(), nil, "main", []string{"extra"}) }},
+		{name: "marketplace missing command", run: func(r Runner) int { return r.runMarketplace(context.Background(), nil) }},
+		{name: "marketplace invalid URL", run: func(r Runner) int { return r.runMarketplace(context.Background(), []string{"list", "--url", "://"}) }},
+		{name: "marketplace list positional", run: func(r Runner) int { return r.runMarketplace(context.Background(), []string{"list", "extra"}) }},
+		{name: "marketplace empty search", run: func(r Runner) int { return r.runMarketplace(context.Background(), []string{"search"}) }},
+		{name: "marketplace show missing identifier", run: func(r Runner) int { return r.runMarketplace(context.Background(), []string{"show"}) }},
+		{name: "marketplace malformed identifier", run: func(r Runner) int { return r.runMarketplace(context.Background(), []string{"show", "invalid"}) }},
+		{name: "marketplace unknown command", run: func(r Runner) int { return r.runMarketplace(context.Background(), []string{"unknown"}) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var stdout, stderr bytes.Buffer
+			if code := tt.run(testRunner(&stdout, &stderr)); code != 2 {
+				t.Fatalf("code=%d stderr=%q", code, stderr.String())
+			}
+		})
+	}
+}

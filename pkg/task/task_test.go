@@ -162,3 +162,39 @@ func TestValidation(t *testing.T) {
 		t.Fatal("zero interval error = nil")
 	}
 }
+
+func TestExecutionErrorsAndAmbiguousMessage(t *testing.T) {
+	t.Parallel()
+	sentinel := errors.New("GraphQL failed")
+	service := task.NewService(executorFunc(func(context.Context, api.GraphQLRequest, any) error { return sentinel }))
+	if _, err := service.List(context.Background(), task.ListOptions{}); !errors.Is(err, sentinel) {
+		t.Fatalf("List() error = %v", err)
+	}
+	if _, err := service.All(context.Background(), task.ListOptions{}); !errors.Is(err, sentinel) {
+		t.Fatalf("All() error = %v", err)
+	}
+	if _, err := service.Get(context.Background(), "task-id", false, false); !errors.Is(err, sentinel) {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if _, err := service.Wait(context.Background(), "task-id", time.Second); !errors.Is(err, sentinel) {
+		t.Fatalf("Wait() error = %v", err)
+	}
+	message := (&task.AmbiguousError{ID: "task-id", Count: 2}).Error()
+	if !strings.Contains(message, "task-id") || !strings.Contains(message, "2") {
+		t.Fatalf("Error() = %q", message)
+	}
+}
+
+func TestAllStopsOnEmptyPage(t *testing.T) {
+	t.Parallel()
+	service := task.NewService(executorFunc(func(_ context.Context, request api.GraphQLRequest, dst any) error {
+		if request.Variables["offset"] == 5 {
+			return decode(dst, `{"InfrahubTask":{"count":10,"edges":[]}}`)
+		}
+		return decode(dst, `{"InfrahubTask":{"count":10,"edges":[{"node":{"id":"one","title":"One","state":"COMPLETED","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-02T03:05:05Z"}}]}}`)
+	}))
+	items, err := service.All(context.Background(), task.ListOptions{Limit: 5})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("All() = %#v, %v", items, err)
+	}
+}

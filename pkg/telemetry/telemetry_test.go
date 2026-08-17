@@ -2,6 +2,7 @@ package telemetry_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -81,4 +82,44 @@ func snapshotsJSON(count int) string {
 		result += `{"id":"item"}`
 	}
 	return result
+}
+
+func TestListNormalizesEmptySnapshotsAndDecodeError(t *testing.T) {
+	t.Parallel()
+	responses := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(<-responses))
+	}))
+	defer server.Close()
+	client, err := api.NewClient(server.URL, api.Config{HTTPClient: server.Client(), DefaultBranch: "main", UserAgent: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := telemetry.NewService(client)
+	responses <- `{"count":0}`
+	page, err := service.List(context.Background(), telemetry.ListOptions{})
+	if err != nil || page.Snapshots == nil || len(page.Snapshots) != 0 {
+		t.Fatalf("page=%#v err=%v", page, err)
+	}
+	responses <- "not-json"
+	if _, err := service.List(context.Background(), telemetry.ListOptions{}); err == nil {
+		t.Fatal("decode error = nil")
+	}
+}
+
+func TestAllPropagatesListError(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+	client, err := api.NewClient(server.URL, api.Config{HTTPClient: server.Client(), DefaultBranch: "main", UserAgent: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = telemetry.NewService(client).All(context.Background(), telemetry.ListOptions{})
+	var httpError *api.HTTPError
+	if !errors.As(err, &httpError) || httpError.StatusCode != http.StatusBadGateway {
+		t.Fatalf("error = %T %v", err, err)
+	}
 }

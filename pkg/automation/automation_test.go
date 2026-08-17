@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"sync"
 	"testing"
@@ -51,7 +52,7 @@ func TestQueryEncodesPathParametersVariablesAndTracker(t *testing.T) {
 	})
 	defer server.Close()
 	var result map[string]any
-	err := service.Query(tracking.WithTracker(context.Background(), "workflow"), automation.QueryOptions{Name: "device/config", Variables: map[string]any{"device": "edge-01"}, Branch: "feature/a", At: at, UpdateGroup: true, Subscribers: []string{"one", "two"}}, &result)
+	err := service.Query(tracking.WithTracker(context.Background(), "workflow"), automation.QueryOptions{Name: "device/config", Variables: map[string]any{"device": "edge-01"}, Parameters: url.Values{"custom": {"one", "two"}}, Branch: "feature/a", At: at, UpdateGroup: true, Subscribers: []string{"one", "two"}}, &result)
 	if err != nil || result["data"] == nil {
 		t.Fatalf("Query() = %#v, %v", result, err)
 	}
@@ -161,5 +162,54 @@ func TestValidationAndHTTPError(t *testing.T) {
 	var httpError *api.HTTPError
 	if !errors.As(err, &httpError) || httpError.StatusCode != http.StatusForbidden {
 		t.Fatalf("error = %T %v", err, err)
+	}
+}
+
+func TestExecutionErrorPaths(t *testing.T) {
+	t.Parallel()
+	service := automation.NewService(nil)
+	if err := service.Query(context.Background(), automation.QueryOptions{Name: "query", Variables: map[string]any{"invalid": make(chan int)}}, &map[string]any{}); err == nil {
+		t.Fatal("variable encoding error = nil")
+	}
+	httpService, server := newService(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) })
+	defer server.Close()
+	if _, err := httpService.RunTransform(context.Background(), automation.RunOptions{Query: automation.QueryOptions{Name: "query"}}, func(context.Context, map[string]any) (any, error) { return nil, nil }); err == nil {
+		t.Fatal("RunTransform() collection error = nil")
+	}
+	if err := httpService.RunGenerator(context.Background(), automation.RunOptions{Query: automation.QueryOptions{Name: "query"}}, func(context.Context, map[string]any) error { return nil }); err == nil {
+		t.Fatal("RunGenerator() collection error = nil")
+	}
+	if _, err := httpService.RunCheck(context.Background(), automation.RunOptions{Query: automation.QueryOptions{Name: "query"}}, func(context.Context, map[string]any, *automation.Reporter) error { return nil }); err == nil {
+		t.Fatal("RunCheck() collection error = nil")
+	}
+}
+
+func TestCheckCallbackErrorAndRawCollection(t *testing.T) {
+	t.Parallel()
+	service, server := newService(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"value":21}`)) })
+	defer server.Close()
+	result, err := service.RunTransform(context.Background(), automation.RunOptions{Query: automation.QueryOptions{Name: "raw"}}, func(_ context.Context, data map[string]any) (any, error) {
+		return data["value"], nil
+	})
+	if err != nil || result != float64(21) {
+		t.Fatalf("RunTransform() = %#v, %v", result, err)
+	}
+	expected := errors.New("check failed")
+	if _, err := service.RunCheck(context.Background(), automation.RunOptions{Query: automation.QueryOptions{Name: "raw"}}, func(context.Context, map[string]any, *automation.Reporter) error { return expected }); !errors.Is(err, expected) {
+		t.Fatalf("RunCheck() error = %v", err)
+	}
+	reporter := automation.NewReporter("main")
+	reporter.Report(automation.SeverityInfo, "", "", "")
+	if len(reporter.Findings()) != 0 {
+		t.Fatalf("empty finding was recorded: %#v", reporter.Findings())
+	}
+}
+
+func TestQueryRejectsMalformedResponse(t *testing.T) {
+	t.Parallel()
+	service, server := newService(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("not-json")) })
+	defer server.Close()
+	if err := service.Query(context.Background(), automation.QueryOptions{Name: "malformed"}, &map[string]any{}); err == nil {
+		t.Fatal("Query() decode error = nil")
 	}
 }
