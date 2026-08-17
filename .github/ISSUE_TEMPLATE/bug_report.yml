@@ -1,0 +1,120 @@
+name: Bug report
+description: Report reproducible behavior that appears to be incorrect.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve the Infrahub Go SDK.
+
+        Do not include API tokens, authorization headers, customer schemas, production endpoints, or other sensitive data. Do not report security vulnerabilities in a public issue; contact the maintainers privately instead.
+
+  - type: input
+    id: sdk-version
+    attributes:
+      label: SDK version
+      description: The module version or commit where the problem occurs.
+      placeholder: v0.1.0 or abc1234
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Paste the output of `go version`.
+      placeholder: go version go1.26.0 linux/amd64
+    validations:
+      required: true
+
+  - type: input
+    id: infrahub-version
+    attributes:
+      label: Infrahub version
+      description: Include the server version when the issue involves an Infrahub instance.
+      placeholder: v1.10.0
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - Root client and configuration
+        - HTTP or GraphQL transport
+        - Branches
+        - Schemas
+        - Dynamic nodes
+        - Object storage
+        - Repositories
+        - Resource pools
+        - Tasks
+        - Tracking
+        - Traversal or diffs
+        - Automation
+        - infrahubctl CLI
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem description
+      description: Explain what went wrong and why it appears to be a bug.
+      placeholder: A clear and concise description of the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest safe example or sequence of commands that reproduces the issue.
+      placeholder: |
+        1. Construct the client with ...
+        2. Call ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include the error type when relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Add relevant logs, stack traces, request paths, or GraphQL errors after removing secrets and customer data.
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Additional environment details
+      description: Include the operating system, architecture, proxy, branch, or point-in-time context when relevant.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and pull requests for duplicates.
+          required: true
+        - label: I removed credentials, customer data, and other sensitive information.
+          required: true
+        - label: I can reproduce this issue with the information provided above.
+          required: true

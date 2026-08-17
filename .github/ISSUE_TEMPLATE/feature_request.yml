@@ -1,0 +1,85 @@
+name: Feature request
+description: Propose an SDK, CLI, or documentation improvement.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for proposing an improvement. For public API changes, describe the caller-facing use case before suggesting an implementation.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Public Go API
+        - HTTP or GraphQL transport
+        - Domain service
+        - infrahubctl CLI
+        - Documentation or examples
+        - Testing or developer experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Describe the user need, limitation, or workflow this proposal addresses.
+      placeholder: As an SDK user, I need to ... so that ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the observable behavior you would like. Keep transport details separate from the caller-facing contract.
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example API or command
+      description: Show how a caller would use the proposed capability, if applicable.
+      render: go
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe current workarounds or other designs you considered.
+
+  - type: input
+    id: infrahub-version
+    attributes:
+      label: Relevant Infrahub version
+      description: Include the version used to verify any version-sensitive API or GraphQL contract.
+      placeholder: v1.10.0
+
+  - type: dropdown
+    id: compatibility
+    attributes:
+      label: Compatibility impact
+      description: Select the expected impact on existing SDK users.
+      options:
+        - Additive and backward compatible
+        - Changes existing behavior
+        - Potentially breaking
+        - Unsure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and pull requests for similar proposals.
+          required: true
+        - label: I described the caller-facing use case and expected behavior.
+          required: true
+        - label: I did not include credentials, customer schemas, or sensitive data.
+          required: true
