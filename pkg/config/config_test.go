@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -76,5 +78,78 @@ server_address = "https://legacy.example.com"
 	}
 	if result.Address != "https://current.example.com" {
 		t.Fatalf("Address = %q", result.Address)
+	}
+}
+
+func TestLoad(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(`address = "https://infrahub.example.com"
+default_branch = "develop"
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Address != "https://infrahub.example.com" || result.DefaultBranch != "develop" {
+		t.Fatalf("config = %#v", result)
+	}
+}
+
+func TestLoadErrors(t *testing.T) {
+	t.Parallel()
+	if _, err := config.Load(filepath.Join(t.TempDir(), "missing.toml")); err == nil || !strings.Contains(err.Error(), "open config") {
+		t.Fatalf("missing file error = %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "invalid.toml")
+	if err := os.WriteFile(path, []byte(`address = [`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "decode config") {
+		t.Fatalf("invalid file error = %v", err)
+	}
+}
+
+func TestDecodeInvalidTOML(t *testing.T) {
+	t.Parallel()
+	if _, err := config.Decode(strings.NewReader(`address = [`)); err == nil || !strings.Contains(err.Error(), "decode TOML") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestEnvironmentTokenAndFallback(t *testing.T) {
+	t.Parallel()
+	values := map[string]string{
+		config.EnvAPIToken:           "environment-secret",
+		config.EnvDefaultBranchAlias: "legacy-branch",
+	}
+	result := (config.Config{DefaultBranch: "file"}).ApplyEnvironment(func(name string) string { return values[name] })
+	if result.APIToken != "environment-secret" || result.DefaultBranch != "legacy-branch" {
+		t.Fatalf("config = %#v", result)
+	}
+}
+
+func TestApplyEnvironmentUsesProcessEnvironment(t *testing.T) {
+	t.Setenv(config.EnvAddress, "https://environment.example.com")
+	t.Setenv(config.EnvAPIToken, "environment-secret")
+	result := (config.Config{}).ApplyEnvironment(nil)
+	if result.Address != "https://environment.example.com" || result.APIToken != "environment-secret" {
+		t.Fatalf("config = %#v", result)
+	}
+}
+
+func TestNewClient(t *testing.T) {
+	t.Parallel()
+	client, err := (config.Config{Address: "https://infrahub.example.com", DefaultBranch: "develop"}).NewClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.DefaultBranch() != "develop" {
+		t.Fatalf("default branch = %q", client.DefaultBranch())
+	}
+	if _, err := (config.Config{Address: "/relative"}).NewClient(); err == nil {
+		t.Fatal("NewClient() error = nil")
 	}
 }
