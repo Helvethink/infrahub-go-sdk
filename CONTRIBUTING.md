@@ -95,6 +95,33 @@ Public names, method signatures, option behavior, serialized request shapes,
 and error matching are compatibility commitments. If a breaking change is
 unavoidable, discuss it in an issue and include migration guidance.
 
+## Commit and pull request titles
+
+Use a short, descriptive commit subject. Keep the pull request title consistent
+with the change because squash merges commonly use it as the resulting commit
+subject.
+
+Use these prefixes for maintenance-only changes that should be identifiable by
+the release-note automation:
+
+- `ci:` for pipelines, workflows, and build infrastructure;
+- `chore:` for GitHub templates, Dependabot, and repository metadata;
+- `docs:` for contribution guidelines and community process
+  documentation.
+
+For example:
+
+```text
+ci: update the release pipeline
+chore(github): add issue templates
+docs(contributing): document release-note conventions
+```
+
+These prefixes allow matching commits to be omitted from generated release
+notes. They do not remove commits from Git history or release tags. Do not use a
+maintenance prefix to hide a user-visible behavior change, migration note, or
+security fix from a release.
+
 ## GraphQL and Infrahub schemas
 
 Infrahub is schema-driven and branch-aware. Do not assume a custom kind or field
