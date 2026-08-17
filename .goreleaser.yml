@@ -3,6 +3,14 @@ before:
   hooks:
     - go mod tidy
 
+changelog:
+  use: git
+  filters:
+    exclude:
+      - '^ci(\([^)]*\))?!?:'
+      - '^chore!?:'
+      - '^docs!?:'
+
 builds:
   # Exporter build
   - main: cmd/infrahubctl/main.go
