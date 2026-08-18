@@ -78,7 +78,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@v2.3.7
+        uses: coverallsapp/github-action@v2.3.8
         with:
           file: coverage.out
           format: golang
