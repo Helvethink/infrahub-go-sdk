@@ -272,8 +272,8 @@ func TestValidateSchemaAndGraphQLQuery(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		payload := decodeCLIRequest(t, request)
-		if payload.Variables["enabled"] != true {
-			t.Errorf("variables = %#v", payload.Variables)
+		if request.URL.EscapedPath() != "/graphql/feature" || payload.Variables["enabled"] != true {
+			t.Errorf("path=%q variables=%#v", request.URL.EscapedPath(), payload.Variables)
 		}
 		_, _ = writer.Write([]byte(`{"data":{"value":42}}`))
 	}))
@@ -282,7 +282,7 @@ func TestValidateSchemaAndGraphQLQuery(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code := runner.Run(context.Background(), []string{
-		"-address", server.URL, "validate", "graphql-query", queryPath,
+		"-address", server.URL, "-branch", "feature", "validate", "graphql-query", queryPath,
 		"--variable", "enabled=true", "--out", out,
 	})
 	data, err := os.ReadFile(out)

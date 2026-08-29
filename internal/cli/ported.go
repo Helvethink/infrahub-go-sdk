@@ -1014,61 +1014,105 @@ func (r Runner) runValidate(ctx context.Context, client *infrahub.Client, branch
 	if len(args) < 2 {
 		return r.usageError("usage: infrahubctl validate <schema|graphql-query> <file> [flags]")
 	}
-	if args[0] == "schema" {
-		documents, err := readSchemaDocuments(args[1:])
-		if err != nil {
-			return r.fail(err)
-		}
-		for index, document := range documents {
-			if len(document) == 0 {
-				return r.fail(fmt.Errorf("schema document %d is empty", index))
-			}
-			if _, nodes := document["nodes"]; !nodes {
-				if _, generics := document["generics"]; !generics {
-					return r.fail(fmt.Errorf("schema document %d must define nodes or generics", index))
-				}
-			}
-		}
-		return r.writeJSON(map[string]any{"valid": true, "documents": len(documents)})
+	var exitCode int
+	switch args[0] {
+	case "schema":
+		exitCode = r.runValidateSchema(args[1:])
+	case "graphql-query":
+		exitCode = r.runValidateGraphQL(ctx, client, branch, args[1:])
+	default:
+		exitCode = r.usageError("infrahubctl: unknown validate command " + args[0])
 	}
-	if args[0] != "graphql-query" {
-		return r.usageError("infrahubctl: unknown validate command " + args[0])
+	return exitCode
+}
+
+func (r Runner) runValidateSchema(paths []string) int {
+	documents, err := readSchemaDocuments(paths)
+	if err != nil {
+		return r.fail(err)
 	}
+	if err := validateSchemaDocuments(documents); err != nil {
+		return r.fail(err)
+	}
+	return r.writeJSON(map[string]any{"valid": true, "documents": len(documents)})
+}
+
+func validateSchemaDocuments(documents []map[string]any) error {
+	for index, document := range documents {
+		if len(document) == 0 {
+			return fmt.Errorf("schema document %d is empty", index)
+		}
+		_, nodes := document["nodes"]
+		_, generics := document["generics"]
+		if !nodes && !generics {
+			return fmt.Errorf("schema document %d must define nodes or generics", index)
+		}
+	}
+	return nil
+}
+
+type graphqlValidationOptions struct {
+	branch    string
+	out       string
+	queryPath string
+	variables []string
+}
+
+func (r Runner) runValidateGraphQL(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	flags := flag.NewFlagSet("validate graphql-query", flag.ContinueOnError)
 	flags.SetOutput(r.Stderr)
 	commandBranch, out := flags.String("branch", branch, "target branch"), flags.String("out", "", "output file")
 	var variables multiFlag
 	flags.Var(&variables, "variable", "GraphQL variable key=value")
-	if err := parseInterspersed(flags, args[1:]); err != nil {
+	if err := parseInterspersed(flags, args); err != nil {
 		return flagExitCode(err)
 	}
 	if flags.NArg() != 1 {
 		return r.usageError("usage: infrahubctl validate graphql-query [flags] <query-file>")
 	}
-	query, err := os.ReadFile(flags.Arg(0))
+	return r.executeGraphQLValidation(ctx, client, graphqlValidationOptions{
+		branch: *commandBranch, out: *out, queryPath: flags.Arg(0), variables: variables,
+	})
+}
+
+func (r Runner) executeGraphQLValidation(
+	ctx context.Context,
+	client *infrahub.Client,
+	options graphqlValidationOptions,
+) int {
+	query, err := os.ReadFile(options.queryPath)
 	if err != nil {
 		return r.fail(err)
 	}
-	values, err := parseAssignments(variables, false)
+	values, err := parseAssignments(options.variables, false)
 	if err != nil {
 		return r.usageError(err.Error())
 	}
 	var result any
-	if err := client.Execute(ctx, infrahub.GraphQLRequest{Query: string(query), Variables: values, Branch: *commandBranch}, &result); err != nil {
+	if err := client.Execute(ctx, infrahub.GraphQLRequest{
+		Query: string(query), Variables: values, Branch: options.branch,
+	}, &result); err != nil {
 		return r.fail(err)
 	}
-	if *out == "" {
+	return r.writeGraphQLValidationResult(result, options.out)
+}
+
+func (r Runner) writeGraphQLValidationResult(result any, out string) int {
+	if out == "" {
 		return r.writeJSON(result)
 	}
-	data, err := json.MarshalIndent(result, "", "  ")
-	if err == nil {
-		data = append(data, '\n')
-		err = os.WriteFile(*out, data, 0o600)
-	}
-	if err != nil {
+	if err := writeIndentedJSON(out, result); err != nil {
 		return r.fail(err)
 	}
 	return 0
+}
+
+func writeIndentedJSON(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
 func (r Runner) runProtocols(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
