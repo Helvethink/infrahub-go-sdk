@@ -12,6 +12,8 @@ import (
 	"testing"
 )
 
+const exitStderrFormat = "exit=%d stderr=%q"
+
 func TestGeneralCommandsAndErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -133,7 +135,7 @@ func TestBranchCommandUsageErrors(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			_, stderr, exitCode := runCLI(t, server, test.args...)
 			if exitCode != 2 || !strings.Contains(stderr, test.wantStderr) {
-				t.Fatalf("exit=%d stderr=%q", exitCode, stderr)
+				t.Fatalf(exitStderrFormat, exitCode, stderr)
 			}
 		})
 	}
@@ -144,7 +146,7 @@ func TestRunBranchRejectsUnknownCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	exitCode := testRunner(&stdout, &stderr).runBranch(t.Context(), nil, []string{"unknown"})
 	if exitCode != 2 || !strings.Contains(stderr.String(), "unknown branch command unknown") {
-		t.Fatalf("exit=%d stderr=%q", exitCode, stderr.String())
+		t.Fatalf(exitStderrFormat, exitCode, stderr.String())
 	}
 }
 
@@ -330,7 +332,7 @@ func TestDiffTreeOptionsAndCancellation(t *testing.T) {
 	var canceledOut, canceledErr bytes.Buffer
 	exitCode = testRunner(&canceledOut, &canceledErr).Run(ctx, []string{"-address", server.URL, "branch", "list"})
 	if exitCode != 1 || !strings.Contains(canceledErr.String(), "context canceled") {
-		t.Fatalf("exit=%d stderr=%q", exitCode, canceledErr.String())
+		t.Fatalf(exitStderrFormat, exitCode, canceledErr.String())
 	}
 }
 
@@ -355,7 +357,7 @@ func TestGraphQLRequestAndServerError(t *testing.T) {
 	defer errorServer.Close()
 	_, stderr, exitCode = runCLI(t, errorServer, "branch", "list")
 	if exitCode != 1 || !strings.Contains(stderr, "HTTP 500") {
-		t.Fatalf("exit=%d stderr=%q", exitCode, stderr)
+		t.Fatalf(exitStderrFormat, exitCode, stderr)
 	}
 }
 
