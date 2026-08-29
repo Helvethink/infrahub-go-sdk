@@ -91,76 +91,105 @@ func (r Runner) runBranch(ctx context.Context, client *infrahub.Client, args []s
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl [global flags] branch <list|get|create|delete|rebase|validate|merge|report>")
 	}
+	var exitCode int
 	switch args[0] {
 	case "list":
-		branches, err := client.Branches.List(ctx)
-		if err != nil {
-			return r.fail(err)
-		}
-		return r.writeJSON(branches)
+		exitCode = r.runBranchList(ctx, client)
 	case "get":
-		if len(args) != 2 {
-			return r.usageError("usage: infrahubctl branch get <name>")
-		}
-		result, err := client.Branches.Get(ctx, args[1])
-		if err != nil {
-			return r.fail(err)
-		}
-		return r.writeJSON(result)
+		exitCode = r.runBranchGet(ctx, client, args[1:])
 	case "create":
-		command := flag.NewFlagSet("branch create", flag.ContinueOnError)
-		command.SetOutput(r.Stderr)
-		description := command.String("description", "", "branch description")
-		syncWithGit := command.Bool("sync-with-git", false, "synchronize branch with Git")
-		if err := parseInterspersed(command, args[1:]); err != nil {
-			return flagExitCode(err)
-		}
-		if command.NArg() != 1 {
-			return r.usageError("usage: infrahubctl branch create [flags] <name>")
-		}
-		result, err := client.Branches.Create(ctx, command.Arg(0), infrahub.BranchCreateOptions{
-			Description: *description, SyncWithGit: *syncWithGit,
-		})
-		if err != nil {
-			return r.fail(err)
-		}
-		return r.writeJSON(result)
-	case "delete", "rebase", "validate", "merge":
-		if len(args) != 2 {
-			return r.usageError("usage: infrahubctl branch " + args[0] + " <name>")
-		}
-		operations := map[string]func(context.Context, string) error{
-			"delete": client.Branches.Delete, "rebase": client.Branches.Rebase,
-			"validate": client.Branches.Validate, "merge": client.Branches.Merge,
-		}
-		if err := operations[args[0]](ctx, args[1]); err != nil {
-			return r.fail(err)
-		}
-		if _, err := fmt.Fprintf(r.Stdout, "%s: ok\n", args[0]); err != nil {
-			return r.fail(fmt.Errorf("write output: %w", err))
-		}
-		return 0
+		exitCode = r.runBranchCreate(ctx, client, args[1:])
+	case "delete":
+		exitCode = r.runBranchOperation(ctx, "delete", args[1:], client.Branches.Delete)
+	case "rebase":
+		exitCode = r.runBranchOperation(ctx, "rebase", args[1:], client.Branches.Rebase)
+	case "validate":
+		exitCode = r.runBranchOperation(ctx, "validate", args[1:], client.Branches.Validate)
+	case "merge":
+		exitCode = r.runBranchOperation(ctx, "merge", args[1:], client.Branches.Merge)
 	case "report":
-		command := flag.NewFlagSet("branch report", flag.ContinueOnError)
-		command.SetOutput(r.Stderr)
-		updateDiff := command.Bool("update-diff", false, "accepted for compatibility; reports current diff data")
-		if err := parseInterspersed(command, args[1:]); err != nil {
-			return flagExitCode(err)
-		}
-		if command.NArg() != 1 {
-			return r.usageError("usage: infrahubctl branch report [flags] <name>")
-		}
-		if *updateDiff {
-			_, _ = fmt.Fprintln(r.Stderr, "infrahubctl: --update-diff is accepted for compatibility; the Go SDK reports current diff data")
-		}
-		var result any
-		if err := client.Branches.DiffData(ctx, command.Arg(0), false, "", "", &result); err != nil {
-			return r.fail(err)
-		}
-		return r.writeJSON(result)
+		exitCode = r.runBranchReport(ctx, client, args[1:])
 	default:
-		return r.usageError("infrahubctl: unknown branch command " + args[0])
+		exitCode = r.usageError("infrahubctl: unknown branch command " + args[0])
 	}
+	return exitCode
+}
+
+func (r Runner) runBranchList(ctx context.Context, client *infrahub.Client) int {
+	branches, err := client.Branches.List(ctx)
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.writeJSON(branches)
+}
+
+func (r Runner) runBranchGet(ctx context.Context, client *infrahub.Client, args []string) int {
+	if len(args) != 1 {
+		return r.usageError("usage: infrahubctl branch get <name>")
+	}
+	result, err := client.Branches.Get(ctx, args[0])
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.writeJSON(result)
+}
+
+func (r Runner) runBranchCreate(ctx context.Context, client *infrahub.Client, args []string) int {
+	command := flag.NewFlagSet("branch create", flag.ContinueOnError)
+	command.SetOutput(r.Stderr)
+	description := command.String("description", "", "branch description")
+	syncWithGit := command.Bool("sync-with-git", false, "synchronize branch with Git")
+	if err := parseInterspersed(command, args); err != nil {
+		return flagExitCode(err)
+	}
+	if command.NArg() != 1 {
+		return r.usageError("usage: infrahubctl branch create [flags] <name>")
+	}
+	result, err := client.Branches.Create(ctx, command.Arg(0), infrahub.BranchCreateOptions{
+		Description: *description, SyncWithGit: *syncWithGit,
+	})
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.writeJSON(result)
+}
+
+func (r Runner) runBranchOperation(
+	ctx context.Context,
+	name string,
+	args []string,
+	operation func(context.Context, string) error,
+) int {
+	if len(args) != 1 {
+		return r.usageError("usage: infrahubctl branch " + name + " <name>")
+	}
+	if err := operation(ctx, args[0]); err != nil {
+		return r.fail(err)
+	}
+	if _, err := fmt.Fprintf(r.Stdout, "%s: ok\n", name); err != nil {
+		return r.fail(fmt.Errorf("write output: %w", err))
+	}
+	return 0
+}
+
+func (r Runner) runBranchReport(ctx context.Context, client *infrahub.Client, args []string) int {
+	command := flag.NewFlagSet("branch report", flag.ContinueOnError)
+	command.SetOutput(r.Stderr)
+	updateDiff := command.Bool("update-diff", false, "accepted for compatibility; reports current diff data")
+	if err := parseInterspersed(command, args); err != nil {
+		return flagExitCode(err)
+	}
+	if command.NArg() != 1 {
+		return r.usageError("usage: infrahubctl branch report [flags] <name>")
+	}
+	if *updateDiff {
+		_, _ = fmt.Fprintln(r.Stderr, "infrahubctl: --update-diff is accepted for compatibility; the Go SDK reports current diff data")
+	}
+	var result any
+	if err := client.Branches.DiffData(ctx, command.Arg(0), false, "", "", &result); err != nil {
+		return r.fail(err)
+	}
+	return r.writeJSON(result)
 }
 
 func (r Runner) runSchema(ctx context.Context, client *infrahub.Client, branch string, args []string) int {

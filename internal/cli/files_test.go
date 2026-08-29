@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,8 +161,10 @@ func TestFileParsingErrors(t *testing.T) {
 		{name: "invalid YAML map", content: `value: [`, ext: ".yaml", read: func(path string) error { _, err := readMapFile(path); return err }, want: "decode YAML"},
 		{name: "unsupported map extension", content: `value`, ext: ".txt", read: func(path string) error { _, err := readMapFile(path); return err }, want: "unsupported file extension"},
 		{name: "empty data", content: `{}`, ext: ".json", read: func(path string) error { _, err := readDataFile(path); return err }, want: "must not be empty"},
+		{name: "invalid object JSON", content: `{`, ext: ".json", read: func(path string) error { _, err := readObjectFile(path); return err }, want: "decode JSON"},
 		{name: "invalid object envelope", content: `{"kind":"Object"}`, ext: ".json", read: func(path string) error { _, err := readObjectFile(path); return err }, want: "expected apiVersion"},
 		{name: "invalid object YAML", content: `spec: [`, ext: ".yaml", read: func(path string) error { _, err := readObjectFile(path); return err }, want: "decode YAML"},
+		{name: "invalid object YAML document", content: `kind: Object`, ext: ".yaml", read: func(path string) error { _, err := readObjectFile(path); return err }, want: "expected apiVersion"},
 		{name: "unsupported object extension", content: `value`, ext: ".txt", read: func(path string) error { _, err := readObjectFile(path); return err }, want: "unsupported file extension"},
 	}
 	for _, test := range tests {
@@ -171,6 +174,49 @@ func TestFileParsingErrors(t *testing.T) {
 			writeTestFile(t, path, test.content)
 			err := test.read(path)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestFileReadErrorPropagation(t *testing.T) {
+	t.Parallel()
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	tests := []struct {
+		name string
+		read func(string) error
+	}{
+		{name: "schema documents", read: func(path string) error { _, err := readSchemaDocuments([]string{path}); return err }},
+		{name: "data file", read: func(path string) error { _, err := readDataFile(path); return err }},
+		{name: "object documents", read: func(path string) error { _, err := readObjectDocuments([]string{path}); return err }},
+		{name: "object file", read: func(path string) error { _, err := readObjectFile(path); return err }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if err := test.read(missing); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("error = %v, want os.ErrNotExist", err)
+			}
+		})
+	}
+}
+
+func TestDocumentReadersPropagateFileParsingErrors(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "input.txt")
+	writeTestFile(t, path, "unsupported")
+	readers := []struct {
+		name string
+		read func() error
+	}{
+		{name: "schema", read: func() error { _, err := readSchemaDocuments([]string{path}); return err }},
+		{name: "object", read: func() error { _, err := readObjectDocuments([]string{path}); return err }},
+	}
+	for _, reader := range readers {
+		t.Run(reader.name, func(t *testing.T) {
+			t.Parallel()
+			if err := reader.read(); err == nil || !strings.Contains(err.Error(), "unsupported file extension") {
 				t.Fatalf("error = %v", err)
 			}
 		})
@@ -212,6 +258,7 @@ func TestNoStructuredDocuments(t *testing.T) {
 	t.Parallel()
 	directory := t.TempDir()
 	writeTestFile(t, filepath.Join(directory, "README.txt"), "ignored")
+	writeTestFile(t, filepath.Join(directory, "empty.yaml"), "---\n")
 	if _, err := readSchemaDocuments([]string{directory}); err == nil || !strings.Contains(err.Error(), "no schema documents") {
 		t.Fatalf("schema error = %v", err)
 	}
@@ -220,6 +267,18 @@ func TestNoStructuredDocuments(t *testing.T) {
 	}
 	if _, err := expandStructuredFiles([]string{filepath.Join(directory, "missing")}); err == nil {
 		t.Fatal("expected missing path error")
+	}
+}
+
+func TestCollectStructuredFilePropagatesWalkError(t *testing.T) {
+	t.Parallel()
+	want := errors.New("walk failed")
+	result := []string{"existing.json"}
+	if err := collectStructuredFile(&result)("input.json", nil, want); !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
+	}
+	if len(result) != 1 || result[0] != "existing.json" {
+		t.Fatalf("result = %#v", result)
 	}
 }
 

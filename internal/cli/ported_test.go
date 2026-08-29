@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
 )
 
 func TestGenerateProtocolsIsDeterministic(t *testing.T) {
@@ -29,11 +32,45 @@ func TestGenerateProtocolsIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestGenerateProtocolsSkipsInvalidSchemaEntries(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{
+		"generics": []any{
+			"invalid",
+			map[string]any{},
+			map[string]any{
+				"kind":       "CoreAsset",
+				"attributes": []any{"invalid", map[string]any{"name": 42}},
+				"relationships": []any{
+					"invalid",
+					map[string]any{"name": "owner"},
+					map[string]any{"name": "site", "peer": "LocationSite"},
+				},
+			},
+		},
+		"nodes": []any{map[string]any{"kind": "BuiltinTag"}},
+	}
+
+	result, err := generateProtocols(schema, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Index(result, "class BuiltinTag") > strings.Index(result, "class CoreAsset") {
+		t.Fatalf("definitions are not sorted: %s", result)
+	}
+	if !strings.Contains(result, "    site: LocationSite\n") || strings.Contains(result, "owner:") {
+		t.Fatalf("invalid relationships were not filtered: %s", result)
+	}
+}
+
 func TestMarketplaceSearchUsesMarketplaceAPIWithoutInfrahubConfig(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/api/v1/schemas" || request.URL.Query().Get("search") != "edge" {
 			t.Errorf("request URL = %s", request.URL.String())
+		}
+		if request.Header.Get("Accept") != "application/json" || request.Header.Get("User-Agent") != "infrahubctl" {
+			t.Errorf("request headers = %#v", request.Header)
 		}
 		_, _ = writer.Write([]byte(`{"items":[]}`))
 	}))
@@ -44,6 +81,23 @@ func TestMarketplaceSearchUsesMarketplaceAPIWithoutInfrahubConfig(t *testing.T) 
 	})
 	if code != 0 || !strings.Contains(stdout.String(), `"items": []`) {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestFetchMarketplaceFailures(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusTeapot)
+	}))
+	defer server.Close()
+
+	if _, err := fetchMarketplace(context.Background(), server.URL); err == nil || !strings.Contains(err.Error(), "HTTP 418") {
+		t.Fatalf("server error = %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := fetchMarketplace(canceled, server.URL); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled request error = %v", err)
 	}
 }
 
@@ -59,6 +113,36 @@ func TestDumpSchemaHelpers(t *testing.T) {
 	selections, err := dumpSelections(schema, "InfraDevice")
 	if err != nil || len(selections) != 1 || selections[0].Name != "name" {
 		t.Fatalf("selections=%#v err=%v", selections, err)
+	}
+}
+
+func TestDumpSelectionsBuildsSortedDynamicFields(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{"generics": []any{
+		"invalid",
+		map[string]any{
+			"namespace": "Core", "name": "Asset",
+			"attributes": []any{
+				"invalid",
+				map[string]any{"name": "zeta"},
+				map[string]any{"name": ""},
+			},
+			"relationships": []any{
+				"invalid",
+				map[string]any{"name": "owner", "cardinality": "one"},
+				map[string]any{"name": "members", "cardinality": "many"},
+				map[string]any{"name": ""},
+			},
+		},
+	}}
+	want := []node.Selection{
+		node.Select("members", node.Select("edges", node.Select("node", node.Select("id")))),
+		node.Select("owner", node.Select("node", node.Select("id"))),
+		node.Select("zeta", node.Select("value")),
+	}
+	got, err := dumpSelections(schema, "CoreAsset")
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("selections=%#v, want %#v, err=%v", got, want, err)
 	}
 }
 
@@ -240,8 +324,8 @@ func TestValidateSchemaAndGraphQLQuery(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		payload := decodeCLIRequest(t, request)
-		if payload.Variables["enabled"] != true {
-			t.Errorf("variables = %#v", payload.Variables)
+		if request.URL.EscapedPath() != "/graphql/feature" || payload.Variables["enabled"] != true {
+			t.Errorf("path=%q variables=%#v", request.URL.EscapedPath(), payload.Variables)
 		}
 		_, _ = writer.Write([]byte(`{"data":{"value":42}}`))
 	}))
@@ -250,7 +334,7 @@ func TestValidateSchemaAndGraphQLQuery(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code := runner.Run(context.Background(), []string{
-		"-address", server.URL, "validate", "graphql-query", queryPath,
+		"-address", server.URL, "-branch", "feature", "validate", "graphql-query", queryPath,
 		"--variable", "enabled=true", "--out", out,
 	})
 	data, err := os.ReadFile(out)
@@ -292,6 +376,28 @@ func TestDumpRelationshipHelpers(t *testing.T) {
 	}
 }
 
+func TestManyRelationshipIdentifiersFiltersDuplicatesAndSorts(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{"nodes": []any{
+		map[string]any{
+			"namespace": "Infra", "name": "Device",
+			"relationships": []any{
+				map[string]any{"identifier": "z_links", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+				map[string]any{"identifier": "z_links", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+				map[string]any{"identifier": "a_links", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+				map[string]any{"identifier": "required_links", "peer": "InfraInterface", "cardinality": "many", "optional": false},
+				map[string]any{"identifier": "missing_peer", "peer": "InfraMissing", "cardinality": "many", "optional": true},
+				map[string]any{"identifier": "", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+			},
+		},
+		map[string]any{"kind": "InfraInterface"},
+	}}
+	want := []string{"a_links", "z_links"}
+	if got := manyRelationshipIdentifiers(schema, []string{"InfraDevice", "InfraInterface"}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("relationship identifiers = %#v, want %#v", got, want)
+	}
+}
+
 func TestPrepareMenuItemValidation(t *testing.T) {
 	t.Parallel()
 	if err := prepareMenuItem(map[string]any{"name": "item", "label": "Item"}, 0); err == nil {
@@ -307,6 +413,10 @@ func TestPrepareMenuItemValidation(t *testing.T) {
 	children := item["children"].([]any)
 	if children[0].(map[string]any)["order_weight"] != 1000 {
 		t.Fatalf("children = %#v", children)
+	}
+	item["children"] = []any{map[string]any{"namespace": "Main", "name": "child"}}
+	if err := prepareMenuItem(item, 0); err == nil || !strings.Contains(err.Error(), "label must be") {
+		t.Fatalf("child validation error = %v", err)
 	}
 	item["children"] = []any{"invalid"}
 	if err := prepareMenuItem(item, 0); err == nil {
@@ -349,6 +459,38 @@ func TestDumpExportsNodesAndRelationships(t *testing.T) {
 	relationships, err := os.ReadFile(filepath.Join(directory, "relationships.json"))
 	if err != nil || strings.TrimSpace(string(relationships)) != "[]" {
 		t.Fatalf("relationships=%q err=%v", relationships, err)
+	}
+}
+
+func TestDumpPaginatesNodes(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			_, _ = writer.Write([]byte(`{"nodes":[{"kind":"BuiltinTag","namespace":"Builtin","attributes":[{"name":"name"}]}]}`))
+			return
+		}
+		payload := decodeCLIRequest(t, request)
+		if payload.OperationName != "QueryBuiltinTag" || payload.Variables["limit"] != float64(1) {
+			t.Fatalf("payload = %#v", payload)
+		}
+		switch payload.Variables["offset"] {
+		case float64(0):
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTag":{"count":2,"edges":[{"node":{"id":"tag-1","kind":"BuiltinTag","name":{"value":"one"}}}]}}}`))
+		case float64(1):
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTag":{"count":2,"edges":[{"node":{"id":"tag-2","kind":"BuiltinTag","name":{"value":"two"}}}]}}}`))
+		default:
+			t.Fatalf("offset = %#v", payload.Variables["offset"])
+		}
+		requests++
+	}))
+	defer server.Close()
+
+	stdout, stderr, code := runCLI(t, server, "dump", "--directory", directory, "--limit", "1")
+	nodes, err := os.ReadFile(filepath.Join(directory, "nodes.json"))
+	if code != 0 || err != nil || requests != 2 || strings.Count(string(nodes), `"graphql_json"`) != 2 {
+		t.Fatalf("code=%d requests=%d nodes=%q readErr=%v stdout=%q stderr=%q", code, requests, nodes, err, stdout, stderr)
 	}
 }
 
@@ -520,6 +662,61 @@ func TestLoadRestoresExistingNodesAndRelationshipEdges(t *testing.T) {
 	})
 	if code != 0 || deviceUpserts != 2 || !strings.Contains(stdout.String(), `"loaded": 2`) {
 		t.Fatalf("code=%d upserts=%d stdout=%q stderr=%q", code, deviceUpserts, stdout.String(), stderr.String())
+	}
+}
+
+func TestLoadContinuesAfterRejectedNode(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	records := []dumpRecord{
+		{Kind: "BadNode", GraphQLJSON: `{"name":{"value":"bad"}}`},
+		{Kind: "BuiltinTag", GraphQLJSON: `{"name":{"value":"good"}}`},
+	}
+	var nodes bytes.Buffer
+	encoder := json.NewEncoder(&nodes)
+	for _, record := range records {
+		if err := encoder.Encode(record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTestFile(t, filepath.Join(directory, "nodes.json"), nodes.String())
+	writeTestFile(t, filepath.Join(directory, "relationships.json"), "[]")
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		payload := decodeCLIRequest(t, request)
+		switch payload.OperationName {
+		case "BadNodeUpsert":
+			_, _ = writer.Write([]byte(`{"errors":[{"message":"rejected"}]}`))
+		case "BuiltinTagUpsert":
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTagUpsert":{"ok":true,"object":{"id":"tag-id","kind":"BuiltinTag"}}}}`))
+		default:
+			t.Fatalf("unexpected operation %q", payload.OperationName)
+		}
+	}))
+	defer server.Close()
+
+	stdout, stderr, code := runCLI(t, server, "load", "--directory", directory, "--continue-on-error")
+	if code != 1 || !strings.Contains(stdout, `"loaded": 1`) || !strings.Contains(stdout, `"failed": 1`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestLoadContinuesAfterInvalidRelationshipEdge(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	writeTestFile(t, filepath.Join(directory, "nodes.json"), "")
+	writeTestFile(t, filepath.Join(directory, "relationships.json"),
+		`[{"node":{"identifier":"device_site","peers":[{"id":"device-id","kind":"InfraDevice"}]}}]`)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.URL.Path != "/api/schema" {
+			t.Fatalf("unexpected request %s %s", request.Method, request.URL)
+		}
+		_, _ = writer.Write([]byte(`{"nodes":[]}`))
+	}))
+	defer server.Close()
+
+	stdout, stderr, code := runCLI(t, server, "load", "--directory", directory, "--continue-on-error")
+	if code != 1 || !strings.Contains(stdout, `"loaded": 0`) || !strings.Contains(stdout, `"failed": 1`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
 

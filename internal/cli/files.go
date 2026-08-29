@@ -78,41 +78,48 @@ func readObjectFile(path string) ([]objectDocument, error) {
 	}
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".json":
+		return readJSONObjectFile(path, data)
+	case ".yaml", ".yml":
+		return readYAMLObjectFile(path, data)
+	default:
+		return nil, fmt.Errorf("%s: unsupported file extension", path)
+	}
+}
+
+func readJSONObjectFile(path string, data []byte) ([]objectDocument, error) {
+	var document map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
+		return nil, fmt.Errorf("%s: decode JSON: %w", path, err)
+	}
+	item, err := parseObjectDocument(path, document)
+	if err != nil {
+		return nil, err
+	}
+	return []objectDocument{item}, nil
+}
+
+func readYAMLObjectFile(path string, data []byte) ([]objectDocument, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var result []objectDocument
+	for {
 		var document map[string]any
-		decoder := json.NewDecoder(strings.NewReader(string(data)))
-		decoder.UseNumber()
-		if err := decoder.Decode(&document); err != nil {
-			return nil, fmt.Errorf("%s: decode JSON: %w", path, err)
+		err := decoder.Decode(&document)
+		if errors.Is(err, io.EOF) {
+			return result, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: decode YAML: %w", path, err)
+		}
+		if len(document) == 0 {
+			continue
 		}
 		item, err := parseObjectDocument(path, document)
 		if err != nil {
 			return nil, err
 		}
-		return []objectDocument{item}, nil
-	case ".yaml", ".yml":
-		decoder := yaml.NewDecoder(bytes.NewReader(data))
-		var result []objectDocument
-		for {
-			var document map[string]any
-			err := decoder.Decode(&document)
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return nil, fmt.Errorf("%s: decode YAML: %w", path, err)
-			}
-			if len(document) == 0 {
-				continue
-			}
-			item, err := parseObjectDocument(path, document)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, item)
-		}
-		return result, nil
-	default:
-		return nil, fmt.Errorf("%s: unsupported file extension", path)
+		result = append(result, item)
 	}
 }
 
@@ -133,7 +140,11 @@ func parseObjectDocument(path string, document map[string]any) (objectDocument, 
 			return objectDocument{}, fmt.Errorf("%s: parameters.expand_range is not supported by the Go CLI yet", path)
 		}
 	}
-	rawData, ok := spec["data"].([]any)
+	return objectDocumentFromData(path, kind, spec["data"])
+}
+
+func objectDocumentFromData(path, kind string, value any) (objectDocument, error) {
+	rawData, ok := value.([]any)
 	if !ok || len(rawData) == 0 {
 		return objectDocument{}, fmt.Errorf("%s: spec.data must be a non-empty list", path)
 	}
@@ -183,23 +194,24 @@ func expandStructuredFiles(paths []string) ([]string, error) {
 			result = append(result, path)
 			continue
 		}
-		err = filepath.WalkDir(path, func(item string, entry fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() {
-				return nil
-			}
-			if isStructuredFile(item) {
-				result = append(result, item)
-			}
-			return nil
-		})
+		err = filepath.WalkDir(path, collectStructuredFile(&result))
 		if err != nil {
 			return nil, err
 		}
 	}
 	return result, nil
+}
+
+func collectStructuredFile(result *[]string) fs.WalkDirFunc {
+	return func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && isStructuredFile(path) {
+			*result = append(*result, path)
+		}
+		return nil
+	}
 }
 
 func isStructuredFile(path string) bool {
