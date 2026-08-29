@@ -352,6 +352,38 @@ func TestDumpExportsNodesAndRelationships(t *testing.T) {
 	}
 }
 
+func TestDumpPaginatesNodes(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			_, _ = writer.Write([]byte(`{"nodes":[{"kind":"BuiltinTag","namespace":"Builtin","attributes":[{"name":"name"}]}]}`))
+			return
+		}
+		payload := decodeCLIRequest(t, request)
+		if payload.OperationName != "QueryBuiltinTag" || payload.Variables["limit"] != float64(1) {
+			t.Fatalf("payload = %#v", payload)
+		}
+		switch payload.Variables["offset"] {
+		case float64(0):
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTag":{"count":2,"edges":[{"node":{"id":"tag-1","kind":"BuiltinTag","name":{"value":"one"}}}]}}}`))
+		case float64(1):
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTag":{"count":2,"edges":[{"node":{"id":"tag-2","kind":"BuiltinTag","name":{"value":"two"}}}]}}}`))
+		default:
+			t.Fatalf("offset = %#v", payload.Variables["offset"])
+		}
+		requests++
+	}))
+	defer server.Close()
+
+	stdout, stderr, code := runCLI(t, server, "dump", "--directory", directory, "--limit", "1")
+	nodes, err := os.ReadFile(filepath.Join(directory, "nodes.json"))
+	if code != 0 || err != nil || requests != 2 || strings.Count(string(nodes), `"graphql_json"`) != 2 {
+		t.Fatalf("code=%d requests=%d nodes=%q readErr=%v stdout=%q stderr=%q", code, requests, nodes, err, stdout, stderr)
+	}
+}
+
 func TestDumpRejectsUnsafeInputsAndExistingOutput(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

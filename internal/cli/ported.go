@@ -30,6 +30,26 @@ type dumpRecord struct {
 	GraphQLJSON string `json:"graphql_json"`
 }
 
+type dumpOptions struct {
+	directory  string
+	branch     string
+	limit      int
+	kinds      []string
+	namespaces []string
+	excludes   []string
+}
+
+type dumpPaths struct {
+	nodes         string
+	relationships string
+}
+
+type dumpPlan struct {
+	schema           map[string]any
+	kinds            []string
+	selectionsByKind map[string][]node.Selection
+}
+
 func (r Runner) runDump(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	flags := flag.NewFlagSet("dump", flag.ContinueOnError)
 	flags.SetOutput(r.Stderr)
@@ -51,107 +71,221 @@ func (r Runner) runDump(ctx context.Context, client *infrahub.Client, branch str
 	if *limit <= 0 {
 		return r.usageError("--limit must be positive")
 	}
-	if err := os.MkdirAll(*directory, 0o755); err != nil {
-		return r.fail(fmt.Errorf("create dump directory: %w", err))
-	}
-	nodesPath, relationshipsPath := filepath.Join(*directory, "nodes.json"), filepath.Join(*directory, "relationships.json")
-	for _, path := range []string{nodesPath, relationshipsPath} {
-		if _, err := os.Stat(path); err == nil {
-			return r.fail(fmt.Errorf("refusing to overwrite %s", path))
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return r.fail(err)
-		}
-	}
-	var rawSchema map[string]any
-	for _, namespace := range namespaces {
-		if namespace == "Internal" || namespace == "Infrahub" || namespace == "Schema" {
-			return r.usageError("namespace " + namespace + " cannot be dumped")
-		}
-	}
-	if err := client.Schema.Fetch(ctx, *commandBranch, namespaces, &rawSchema); err != nil {
+	return r.executeDump(ctx, client, dumpOptions{
+		directory:  *directory,
+		branch:     *commandBranch,
+		limit:      *limit,
+		kinds:      kinds,
+		namespaces: namespaces,
+		excludes:   excludes,
+	})
+}
+
+func (r Runner) executeDump(ctx context.Context, client *infrahub.Client, options dumpOptions) int {
+	paths, err := prepareDumpPaths(options.directory)
+	if err != nil {
 		return r.fail(err)
 	}
+	if err := validateDumpNamespaces(options.namespaces); err != nil {
+		return r.usageError(err.Error())
+	}
+	plan, err := prepareDumpPlan(ctx, client, options)
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.exportDump(ctx, client, options, paths, plan)
+}
+
+func prepareDumpPaths(directory string) (dumpPaths, error) {
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		return dumpPaths{}, fmt.Errorf("create dump directory: %w", err)
+	}
+	paths := dumpPaths{
+		nodes:         filepath.Join(directory, "nodes.json"),
+		relationships: filepath.Join(directory, "relationships.json"),
+	}
+	for _, path := range []string{paths.nodes, paths.relationships} {
+		if _, err := os.Stat(path); err == nil {
+			return dumpPaths{}, fmt.Errorf("refusing to overwrite %s", path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return dumpPaths{}, err
+		}
+	}
+	return paths, nil
+}
+
+func validateDumpNamespaces(namespaces []string) error {
+	for _, namespace := range namespaces {
+		if namespace == "Internal" || namespace == "Infrahub" || namespace == "Schema" {
+			return fmt.Errorf("namespace %s cannot be dumped", namespace)
+		}
+	}
+	return nil
+}
+
+func prepareDumpPlan(ctx context.Context, client *infrahub.Client, options dumpOptions) (dumpPlan, error) {
+	var rawSchema map[string]any
+	if err := client.Schema.Fetch(ctx, options.branch, options.namespaces, &rawSchema); err != nil {
+		return dumpPlan{}, err
+	}
+	kinds := options.kinds
 	if len(kinds) == 0 {
-		kinds = schemaNodeKinds(rawSchema, namespaces, excludes)
+		kinds = schemaNodeKinds(rawSchema, options.namespaces, options.excludes)
 	}
 	if len(kinds) == 0 {
-		return r.fail(fmt.Errorf("branch schema does not contain exportable node kinds"))
+		return dumpPlan{}, fmt.Errorf("branch schema does not contain exportable node kinds")
 	}
 	selectionsByKind := make(map[string][]node.Selection, len(kinds))
 	for _, kind := range kinds {
 		selections, err := dumpSelections(rawSchema, kind)
 		if err != nil {
-			return r.fail(err)
+			return dumpPlan{}, err
 		}
 		selectionsByKind[kind] = selections
 	}
-	file, err := os.CreateTemp(*directory, ".nodes-*.tmp")
+	return dumpPlan{schema: rawSchema, kinds: kinds, selectionsByKind: selectionsByKind}, nil
+}
+
+func (r Runner) exportDump(
+	ctx context.Context,
+	client *infrahub.Client,
+	options dumpOptions,
+	paths dumpPaths,
+	plan dumpPlan,
+) int {
+	temporaryPath, count, err := writeDumpNodes(ctx, client, options, plan)
 	if err != nil {
 		return r.fail(err)
+	}
+	defer func() { _ = os.Remove(temporaryPath) }()
+	manyRelationships, err := fetchDumpRelationships(ctx, client, options.branch, plan.schema, plan.kinds)
+	if err != nil {
+		return r.fail(err)
+	}
+	if err := os.Rename(temporaryPath, paths.nodes); err != nil {
+		return r.fail(err)
+	}
+	if err := writeDumpRelationships(paths.relationships, manyRelationships); err != nil {
+		return r.fail(err)
+	}
+	return r.writeJSON(map[string]any{"nodes": count, "directory": options.directory})
+}
+
+func writeDumpNodes(
+	ctx context.Context,
+	client *infrahub.Client,
+	options dumpOptions,
+	plan dumpPlan,
+) (string, int, error) {
+	file, err := os.CreateTemp(options.directory, ".nodes-*.tmp")
+	if err != nil {
+		return "", 0, err
 	}
 	temporaryPath := file.Name()
-	defer func() { _ = os.Remove(temporaryPath) }()
-	encoder := json.NewEncoder(file)
-	count := 0
-	for _, kind := range kinds {
-		for offset := 0; ; offset += *limit {
-			page, queryErr := client.Nodes.Query(ctx, kind, node.QueryOptions{Branch: *commandBranch, Offset: offset, Limit: *limit, Selections: selectionsByKind[kind]})
-			if queryErr != nil {
-				_ = file.Close()
-				return r.fail(queryErr)
-			}
-			for _, item := range page.Nodes {
-				payload, marshalErr := json.Marshal(item.Fields)
-				if marshalErr != nil {
-					_ = file.Close()
-					return r.fail(marshalErr)
-				}
-				if err := encoder.Encode(dumpRecord{ID: item.ID, Kind: kind, GraphQLJSON: string(payload)}); err != nil {
-					_ = file.Close()
-					return r.fail(err)
-				}
-				count++
-			}
-			if len(page.Nodes) < *limit || offset+len(page.Nodes) >= page.Count {
-				break
-			}
-		}
+	count, err := encodeDumpNodes(ctx, client, json.NewEncoder(file), options, plan)
+	if err != nil {
+		_ = file.Close()
+		_ = os.Remove(temporaryPath)
+		return "", 0, err
 	}
 	if err := file.Close(); err != nil {
-		return r.fail(err)
+		_ = os.Remove(temporaryPath)
+		return "", 0, err
 	}
-	manyRelationships := []any{}
-	identifiers := manyRelationshipIdentifiers(rawSchema, kinds)
-	if len(identifiers) > 0 {
-		var response struct {
-			Relationship struct {
-				Edges []any `json:"edges"`
-			} `json:"Relationship"`
-		}
-		err := client.Execute(ctx, infrahub.GraphQLRequest{
-			Query:     `query GetRelationships($relationship_identifiers: [String!]!) { Relationship(ids: $relationship_identifiers) { edges { node { identifier peers { id kind } } } } }`,
-			Variables: map[string]any{"relationship_identifiers": identifiers}, Branch: *commandBranch,
-		}, &response)
+	return temporaryPath, count, nil
+}
+
+func encodeDumpNodes(
+	ctx context.Context,
+	client *infrahub.Client,
+	encoder *json.Encoder,
+	options dumpOptions,
+	plan dumpPlan,
+) (int, error) {
+	count := 0
+	for _, kind := range plan.kinds {
+		encoded, err := encodeDumpKind(ctx, client, encoder, options, kind, plan.selectionsByKind[kind])
 		if err != nil {
-			return r.fail(err)
+			return 0, err
 		}
-		manyRelationships = response.Relationship.Edges
+		count += encoded
 	}
-	if err := os.Rename(temporaryPath, nodesPath); err != nil {
-		return r.fail(err)
+	return count, nil
+}
+
+func encodeDumpKind(
+	ctx context.Context,
+	client *infrahub.Client,
+	encoder *json.Encoder,
+	options dumpOptions,
+	kind string,
+	selections []node.Selection,
+) (int, error) {
+	count := 0
+	for offset := 0; ; offset += options.limit {
+		page, err := client.Nodes.Query(ctx, kind, node.QueryOptions{
+			Branch: options.branch, Offset: offset, Limit: options.limit, Selections: selections,
+		})
+		if err != nil {
+			return 0, err
+		}
+		encoded, err := encodeDumpPage(encoder, kind, page.Nodes)
+		if err != nil {
+			return 0, err
+		}
+		count += encoded
+		if len(page.Nodes) < options.limit || offset+len(page.Nodes) >= page.Count {
+			return count, nil
+		}
 	}
-	relationships, err := os.OpenFile(relationshipsPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+}
+
+func encodeDumpPage(encoder *json.Encoder, kind string, items []node.Node) (int, error) {
+	for _, item := range items {
+		payload, err := json.Marshal(item.Fields)
+		if err != nil {
+			return 0, err
+		}
+		if err := encoder.Encode(dumpRecord{ID: item.ID, Kind: kind, GraphQLJSON: string(payload)}); err != nil {
+			return 0, err
+		}
+	}
+	return len(items), nil
+}
+
+func fetchDumpRelationships(
+	ctx context.Context,
+	client *infrahub.Client,
+	branch string,
+	schema map[string]any,
+	kinds []string,
+) ([]any, error) {
+	identifiers := manyRelationshipIdentifiers(schema, kinds)
+	if len(identifiers) == 0 {
+		return []any{}, nil
+	}
+	var response struct {
+		Relationship struct {
+			Edges []any `json:"edges"`
+		} `json:"Relationship"`
+	}
+	err := client.Execute(ctx, infrahub.GraphQLRequest{
+		Query:     `query GetRelationships($relationship_identifiers: [String!]!) { Relationship(ids: $relationship_identifiers) { edges { node { identifier peers { id kind } } } } }`,
+		Variables: map[string]any{"relationship_identifiers": identifiers}, Branch: branch,
+	}, &response)
+	return response.Relationship.Edges, err
+}
+
+func writeDumpRelationships(path string, values []any) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return r.fail(err)
+		return err
 	}
-	if err := json.NewEncoder(relationships).Encode(manyRelationships); err != nil {
-		_ = relationships.Close()
-		return r.fail(err)
+	if err := json.NewEncoder(file).Encode(values); err != nil {
+		_ = file.Close()
+		return err
 	}
-	if err := relationships.Close(); err != nil {
-		return r.fail(err)
-	}
-	return r.writeJSON(map[string]any{"nodes": count, "directory": *directory})
+	return file.Close()
 }
 
 func manyRelationshipIdentifiers(schema map[string]any, kinds []string) []string {
