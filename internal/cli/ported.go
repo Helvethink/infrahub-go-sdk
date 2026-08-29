@@ -453,6 +453,42 @@ func dumpRelationshipSelection(relationship map[string]any) (node.Selection, boo
 	return node.Select(name, node.Select("node", node.Select("id"))), true
 }
 
+type loadOptions struct {
+	directory       string
+	branch          string
+	continueOnError bool
+}
+
+type pendingDumpNode struct {
+	record        dumpRecord
+	data          map[string]any
+	relationships map[string]any
+	hfid          []string
+}
+
+type dumpRelationshipPeer struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+}
+
+type dumpRelationshipEdge struct {
+	Node struct {
+		Identifier string                 `json:"identifier"`
+		Peers      []dumpRelationshipPeer `json:"peers"`
+	} `json:"node"`
+}
+
+type loadDumpData struct {
+	nodes             []pendingDumpNode
+	relationshipEdges []dumpRelationshipEdge
+}
+
+type loadProgress struct {
+	loaded int
+	failed int
+	idMap  map[string]string
+}
+
 func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	flags := flag.NewFlagSet("load", flag.ContinueOnError)
 	flags.SetOutput(r.Stderr)
@@ -465,68 +501,117 @@ func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch str
 	if flags.NArg() != 0 {
 		return r.usageError("usage: infrahubctl load [--directory DIR]")
 	}
-	file, err := os.Open(filepath.Join(*directory, "nodes.json"))
+	return r.executeLoad(ctx, client, loadOptions{
+		directory: *directory, branch: *commandBranch, continueOnError: *continueOnError,
+	})
+}
+
+func (r Runner) executeLoad(ctx context.Context, client *infrahub.Client, options loadOptions) int {
+	dump, err := readLoadDump(options.directory)
 	if err != nil {
 		return r.fail(err)
+	}
+	progress, err := restoreDumpNodes(ctx, client.Nodes, dump.nodes, options)
+	if err != nil {
+		return r.fail(err)
+	}
+	failed, err := restoreDumpNodeRelationships(ctx, client.Nodes, dump.nodes, progress.idMap, options)
+	progress.failed += failed
+	if err != nil {
+		return r.fail(err)
+	}
+	failed, err = restoreDumpRelationshipEdges(ctx, client, dump.relationshipEdges, progress.idMap, options)
+	progress.failed += failed
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.writeLoadResult(progress)
+}
+
+func readLoadDump(directory string) (loadDumpData, error) {
+	file, err := os.Open(filepath.Join(directory, "nodes.json"))
+	if err != nil {
+		return loadDumpData{}, err
 	}
 	defer func() { _ = file.Close() }()
-	relationshipData, err := os.ReadFile(filepath.Join(*directory, "relationships.json"))
+	relationshipData, err := os.ReadFile(filepath.Join(directory, "relationships.json"))
 	if err != nil {
-		return r.fail(err)
+		return loadDumpData{}, err
 	}
-	var relationshipEdges []struct {
-		Node struct {
-			Identifier string `json:"identifier"`
-			Peers      []struct {
-				ID   string `json:"id"`
-				Kind string `json:"kind"`
-			} `json:"peers"`
-		} `json:"node"`
-	}
+	var relationshipEdges []dumpRelationshipEdge
 	if err := json.Unmarshal(relationshipData, &relationshipEdges); err != nil {
-		return r.fail(fmt.Errorf("decode relationships.json: %w", err))
+		return loadDumpData{}, fmt.Errorf("decode relationships.json: %w", err)
 	}
-	scanner := bufio.NewScanner(file)
+	nodes, err := readPendingDumpNodes(file)
+	if err != nil {
+		return loadDumpData{}, err
+	}
+	return loadDumpData{nodes: nodes, relationshipEdges: relationshipEdges}, nil
+}
+
+func readPendingDumpNodes(input io.Reader) ([]pendingDumpNode, error) {
+	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, 64*1024), 16<<20)
-	type pendingNode struct {
-		record        dumpRecord
-		data          map[string]any
-		relationships map[string]any
-		hfid          []string
-	}
-	var pending []pendingNode
+	var pending []pendingDumpNode
 	for scanner.Scan() {
-		var record dumpRecord
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			return r.fail(fmt.Errorf("decode nodes.json line %d: %w", len(pending)+1, err))
+		item, err := decodePendingDumpNode(scanner.Bytes(), len(pending)+1)
+		if err != nil {
+			return nil, err
 		}
-		var data map[string]any
-		if err := json.Unmarshal([]byte(record.GraphQLJSON), &data); err != nil {
-			return r.fail(fmt.Errorf("decode node %q: %w", record.ID, err))
-		}
-		data, relationships, hfid := dumpMutationData(data)
-		pending = append(pending, pendingNode{record: record, data: data, relationships: relationships, hfid: hfid})
+		pending = append(pending, item)
 	}
 	if err := scanner.Err(); err != nil {
-		return r.fail(err)
+		return nil, err
 	}
-	loaded, failed := 0, 0
-	idMap := make(map[string]string, len(pending))
+	return pending, nil
+}
+
+func decodePendingDumpNode(data []byte, line int) (pendingDumpNode, error) {
+	var record dumpRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return pendingDumpNode{}, fmt.Errorf("decode nodes.json line %d: %w", line, err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(record.GraphQLJSON), &fields); err != nil {
+		return pendingDumpNode{}, fmt.Errorf("decode node %q: %w", record.ID, err)
+	}
+	fields, relationships, hfid := dumpMutationData(fields)
+	return pendingDumpNode{record: record, data: fields, relationships: relationships, hfid: hfid}, nil
+}
+
+func restoreDumpNodes(
+	ctx context.Context,
+	service *node.Service,
+	pending []pendingDumpNode,
+	options loadOptions,
+) (loadProgress, error) {
+	progress := loadProgress{idMap: make(map[string]string, len(pending))}
 	for index := range pending {
 		item := &pending[index]
-		restored, err := restoreDumpNode(ctx, client.Nodes, item.record, item.data, item.hfid, *commandBranch)
+		restored, err := restoreDumpNode(ctx, service, item.record, item.data, item.hfid, options.branch)
 		if err != nil {
-			failed++
-			if !*continueOnError {
-				return r.fail(err)
+			progress.failed++
+			if !options.continueOnError {
+				return progress, err
 			}
 			continue
 		}
 		if item.record.ID != "" {
-			idMap[item.record.ID] = restored.ID
+			progress.idMap[item.record.ID] = restored.ID
 		}
-		loaded++
+		progress.loaded++
 	}
+	return progress, nil
+}
+
+func restoreDumpNodeRelationships(
+	ctx context.Context,
+	service *node.Service,
+	pending []pendingDumpNode,
+	idMap map[string]string,
+	options loadOptions,
+) (int, error) {
+	failed := 0
 	for _, item := range pending {
 		sourceID := idMap[item.record.ID]
 		if sourceID == "" || len(item.relationships) == 0 {
@@ -536,57 +621,85 @@ func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch str
 		for name, value := range item.relationships {
 			data[name] = remapRelatedNodeIDs(value, idMap)
 		}
-		if _, err := client.Nodes.Upsert(ctx, item.record.Kind, data, *commandBranch); err != nil {
+		if _, err := service.Upsert(ctx, item.record.Kind, data, options.branch); err != nil {
 			failed++
-			if !*continueOnError {
-				return r.fail(err)
+			if !options.continueOnError {
+				return failed, err
 			}
 		}
 	}
-	if len(relationshipEdges) > 0 {
-		var rawSchema map[string]any
-		if err := client.Schema.Fetch(ctx, *commandBranch, nil, &rawSchema); err != nil {
-			return r.fail(err)
+	return failed, nil
+}
+
+func restoreDumpRelationshipEdges(
+	ctx context.Context,
+	client *infrahub.Client,
+	edges []dumpRelationshipEdge,
+	idMap map[string]string,
+	options loadOptions,
+) (int, error) {
+	if len(edges) == 0 {
+		return 0, nil
+	}
+	var rawSchema map[string]any
+	if err := client.Schema.Fetch(ctx, options.branch, nil, &rawSchema); err != nil {
+		return 0, err
+	}
+	relationshipNames := relationshipNamesByKind(rawSchema)
+	failed := 0
+	for _, edge := range edges {
+		source, destination, name, err := resolveDumpRelationship(edge, relationshipNames, idMap)
+		if err != nil {
+			failed++
+			if !options.continueOnError {
+				return failed, err
+			}
+			continue
 		}
-		relationshipNames := relationshipNamesByKind(rawSchema)
-		for _, edge := range relationshipEdges {
-			if len(edge.Node.Peers) != 2 {
-				failed++
-				if !*continueOnError {
-					return r.fail(fmt.Errorf("relationship %q must have exactly two peers", edge.Node.Identifier))
-				}
-				continue
-			}
-			source, destination := edge.Node.Peers[0], edge.Node.Peers[1]
-			source.ID = remapNodeID(source.ID, idMap)
-			destination.ID = remapNodeID(destination.ID, idMap)
-			name := relationshipNames[source.Kind+"\x00"+edge.Node.Identifier]
-			if name == "" {
-				source, destination = destination, source
-				name = relationshipNames[source.Kind+"\x00"+edge.Node.Identifier]
-			}
-			if name == "" {
-				failed++
-				if !*continueOnError {
-					return r.fail(fmt.Errorf("relationship %q is absent from the branch schema", edge.Node.Identifier))
-				}
-				continue
-			}
-			_, err := client.Nodes.Upsert(ctx, source.Kind, map[string]any{
-				"id": source.ID, name: []map[string]any{{"id": destination.ID}},
-			}, *commandBranch)
-			if err != nil {
-				failed++
-				if !*continueOnError {
-					return r.fail(err)
-				}
+		_, err = client.Nodes.Upsert(ctx, source.Kind, map[string]any{
+			"id": source.ID, name: []map[string]any{{"id": destination.ID}},
+		}, options.branch)
+		if err != nil {
+			failed++
+			if !options.continueOnError {
+				return failed, err
 			}
 		}
 	}
-	if code := r.writeJSON(map[string]int{"loaded": loaded, "failed": failed}); code != 0 {
+	return failed, nil
+}
+
+func resolveDumpRelationship(
+	edge dumpRelationshipEdge,
+	names map[string]string,
+	idMap map[string]string,
+) (dumpRelationshipPeer, dumpRelationshipPeer, string, error) {
+	if len(edge.Node.Peers) != 2 {
+		return dumpRelationshipPeer{}, dumpRelationshipPeer{}, "", fmt.Errorf(
+			"relationship %q must have exactly two peers", edge.Node.Identifier,
+		)
+	}
+	source, destination := edge.Node.Peers[0], edge.Node.Peers[1]
+	source.ID = remapNodeID(source.ID, idMap)
+	destination.ID = remapNodeID(destination.ID, idMap)
+	name := names[source.Kind+"\x00"+edge.Node.Identifier]
+	if name == "" {
+		source, destination = destination, source
+		name = names[source.Kind+"\x00"+edge.Node.Identifier]
+	}
+	if name == "" {
+		return dumpRelationshipPeer{}, dumpRelationshipPeer{}, "", fmt.Errorf(
+			"relationship %q is absent from the branch schema", edge.Node.Identifier,
+		)
+	}
+	return source, destination, name, nil
+}
+
+func (r Runner) writeLoadResult(progress loadProgress) int {
+	if code := r.writeJSON(map[string]int{"loaded": progress.loaded, "failed": progress.failed}); code != 0 {
 		return code
 	}
-	if failed > 0 {
+	if progress.failed > 0 {
 		return 1
 	}
 	return 0

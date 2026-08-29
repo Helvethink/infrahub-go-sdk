@@ -609,6 +609,61 @@ func TestLoadRestoresExistingNodesAndRelationshipEdges(t *testing.T) {
 	}
 }
 
+func TestLoadContinuesAfterRejectedNode(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	records := []dumpRecord{
+		{Kind: "BadNode", GraphQLJSON: `{"name":{"value":"bad"}}`},
+		{Kind: "BuiltinTag", GraphQLJSON: `{"name":{"value":"good"}}`},
+	}
+	var nodes bytes.Buffer
+	encoder := json.NewEncoder(&nodes)
+	for _, record := range records {
+		if err := encoder.Encode(record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTestFile(t, filepath.Join(directory, "nodes.json"), nodes.String())
+	writeTestFile(t, filepath.Join(directory, "relationships.json"), "[]")
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		payload := decodeCLIRequest(t, request)
+		switch payload.OperationName {
+		case "BadNodeUpsert":
+			_, _ = writer.Write([]byte(`{"errors":[{"message":"rejected"}]}`))
+		case "BuiltinTagUpsert":
+			_, _ = writer.Write([]byte(`{"data":{"BuiltinTagUpsert":{"ok":true,"object":{"id":"tag-id","kind":"BuiltinTag"}}}}`))
+		default:
+			t.Fatalf("unexpected operation %q", payload.OperationName)
+		}
+	}))
+	defer server.Close()
+
+	stdout, stderr, code := runCLI(t, server, "load", "--directory", directory, "--continue-on-error")
+	if code != 1 || !strings.Contains(stdout, `"loaded": 1`) || !strings.Contains(stdout, `"failed": 1`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestLoadContinuesAfterInvalidRelationshipEdge(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	writeTestFile(t, filepath.Join(directory, "nodes.json"), "")
+	writeTestFile(t, filepath.Join(directory, "relationships.json"),
+		`[{"node":{"identifier":"device_site","peers":[{"id":"device-id","kind":"InfraDevice"}]}}]`)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.URL.Path != "/api/schema" {
+			t.Fatalf("unexpected request %s %s", request.Method, request.URL)
+		}
+		_, _ = writer.Write([]byte(`{"nodes":[]}`))
+	}))
+	defer server.Close()
+
+	stdout, stderr, code := runCLI(t, server, "load", "--directory", directory, "--continue-on-error")
+	if code != 1 || !strings.Contains(stdout, `"loaded": 0`) || !strings.Contains(stdout, `"failed": 1`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
 func TestLoadInputErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
