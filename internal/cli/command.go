@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	flag "github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
@@ -85,40 +86,78 @@ func newRootCommand(ctx context.Context, runner Runner) *cobra.Command {
 }
 
 func (s *commandState) prepareClient(command *cobra.Command, args []string) error {
-	if command == command.Root() || command.Name() == "help" {
+	if skipClientPreparation(command, args) {
 		return nil
 	}
-	for _, arg := range args {
-		if arg == "-h" || arg == "--help" {
-			return nil
-		}
-	}
-	if err := s.configureLogger(environmentLogLevel(s.runner.Getenv, s.logLevel, command.Root().PersistentFlags().Changed("log-level"))); err != nil {
+	if err := s.configureInitialLogger(command); err != nil {
 		return statusError(s.runner.usageError(err.Error()))
 	}
 	if command.Annotations[offlineCommand] == "true" {
 		return nil
 	}
+	if err := s.loadClientSettings(command); err != nil {
+		return err
+	}
+	return s.initializeClient(command)
+}
+
+func skipClientPreparation(command *cobra.Command, args []string) bool {
+	if command == command.Root() || command.Name() == "help" {
+		return true
+	}
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *commandState) configureInitialLogger(command *cobra.Command) error {
+	flags := command.Root().PersistentFlags()
+	value := environmentLogLevel(s.runner.Getenv, s.logLevel, flags.Changed("log-level"))
+	return s.configureLogger(value)
+}
+
+func (s *commandState) loadClientSettings(command *cobra.Command) error {
 	settings, err := s.runner.loadConfig(s.configPath, command.Root().PersistentFlags().Changed("config"))
 	if err != nil {
 		return statusError(s.runner.fail(err))
 	}
+	loader, err := newSettingsLoader(settings, s.runner.Getenv)
+	if err != nil {
+		return statusError(s.runner.fail(err))
+	}
+	flags := command.Root().PersistentFlags()
+	if err := s.bindSettingsFlags(loader, flags); err != nil {
+		return statusError(s.runner.fail(err))
+	}
+	s.settings = settingsFromLoader(loader)
+	if err := s.configureLogger(s.settings.LogLevel); err != nil {
+		return statusError(s.runner.usageError(err.Error()))
+	}
+	return nil
+}
 
+func newSettingsLoader(settings sdkconfig.Config, getenv func(string) string) (*viper.Viper, error) {
 	loader := viper.New()
 	loader.SetDefault("default_branch", "main")
 	loader.SetDefault("log_level", "error")
 	if err := loader.MergeConfigMap(configMap(settings)); err != nil {
-		return statusError(s.runner.fail(err))
+		return nil, err
 	}
-	if err := loader.MergeConfigMap(environmentMap(s.runner.Getenv)); err != nil {
-		return statusError(s.runner.fail(err))
+	if err := loader.MergeConfigMap(environmentMap(getenv)); err != nil {
+		return nil, err
 	}
-	flags := command.Root().PersistentFlags()
+	return loader, nil
+}
+
+func (s *commandState) bindSettingsFlags(loader *viper.Viper, flags *flag.FlagSet) error {
 	for key, name := range map[string]string{
 		"address": "address", "api_token": "token", "default_branch": "branch", "log_level": "log-level",
 	} {
 		if err := loader.BindPFlag(key, flags.Lookup(name)); err != nil {
-			return statusError(s.runner.fail(err))
+			return err
 		}
 	}
 	if flags.Changed("address") {
@@ -133,35 +172,30 @@ func (s *commandState) prepareClient(command *cobra.Command, args []string) erro
 	if flags.Changed("log-level") {
 		loader.Set("log_level", s.logLevel)
 	}
-	level, enabled, err := parseLogLevel(loader.GetString("log_level"))
-	if err != nil {
-		return statusError(s.runner.usageError(err.Error()))
-	}
-	if !s.runner.loggerInjected {
-		if enabled {
-			s.runner.Logger = newCLILogger(s.runner.Stderr, level)
-			s.runner.logErrors = true
-		} else {
-			s.runner.Logger = zap.NewNop()
-			s.runner.logErrors = false
-		}
-	}
-	s.settings = sdkconfig.Config{
+	return nil
+}
+
+func settingsFromLoader(loader *viper.Viper) sdkconfig.Config {
+	return sdkconfig.Config{
 		Address:       loader.GetString("address"),
 		APIToken:      loader.GetString("api_token"),
 		DefaultBranch: loader.GetString("default_branch"),
 		LogLevel:      loader.GetString("log_level"),
 	}
+}
+
+func (s *commandState) initializeClient(command *cobra.Command) error {
 	if s.settings.Address == "" {
 		if command.Annotations[optionalClientCommand] == "true" {
 			return nil
 		}
 		return statusError(s.runner.usageError("infrahubctl: address is required in --address, INFRAHUB_ADDRESS, or the config file"))
 	}
-	s.client, err = s.settings.NewClient()
+	client, err := s.settings.NewClient()
 	if err != nil {
 		return statusError(s.runner.fail(err))
 	}
+	s.client = client
 	return nil
 }
 
