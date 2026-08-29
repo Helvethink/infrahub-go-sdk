@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -68,6 +69,9 @@ func TestMarketplaceSearchUsesMarketplaceAPIWithoutInfrahubConfig(t *testing.T) 
 		if request.URL.Path != "/api/v1/schemas" || request.URL.Query().Get("search") != "edge" {
 			t.Errorf("request URL = %s", request.URL.String())
 		}
+		if request.Header.Get("Accept") != "application/json" || request.Header.Get("User-Agent") != "infrahubctl" {
+			t.Errorf("request headers = %#v", request.Header)
+		}
 		_, _ = writer.Write([]byte(`{"items":[]}`))
 	}))
 	defer server.Close()
@@ -77,6 +81,23 @@ func TestMarketplaceSearchUsesMarketplaceAPIWithoutInfrahubConfig(t *testing.T) 
 	})
 	if code != 0 || !strings.Contains(stdout.String(), `"items": []`) {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestFetchMarketplaceFailures(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusTeapot)
+	}))
+	defer server.Close()
+
+	if _, err := fetchMarketplace(context.Background(), server.URL); err == nil || !strings.Contains(err.Error(), "HTTP 418") {
+		t.Fatalf("server error = %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := fetchMarketplace(canceled, server.URL); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled request error = %v", err)
 	}
 }
 

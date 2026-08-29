@@ -1304,6 +1304,16 @@ func protocolAttributeType(attribute map[string]any) string {
 	return fieldType
 }
 
+type marketplaceOptions struct {
+	command    string
+	baseURL    string
+	collection bool
+	query      string
+	out        string
+	limit      int
+	args       []string
+}
+
 func (r Runner) runMarketplace(ctx context.Context, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl marketplace <list|search|show|get>")
@@ -1318,81 +1328,129 @@ func (r Runner) runMarketplace(ctx context.Context, args []string) int {
 	if err := parseInterspersed(flags, args[1:]); err != nil {
 		return flagExitCode(err)
 	}
-	parsed, err := url.Parse(*base)
+	options := marketplaceOptions{
+		command:    args[0],
+		baseURL:    *base,
+		collection: *collection,
+		query:      *query,
+		out:        *out,
+		limit:      *limit,
+		args:       flags.Args(),
+	}
+	requestURL, err := marketplaceURL(options)
+	if err != nil {
+		return r.usageError(err.Error())
+	}
+	body, err := fetchMarketplace(ctx, requestURL)
+	if err != nil {
+		return r.fail(err)
+	}
+	if err := r.writeMarketplaceResponse(options, body); err != nil {
+		return r.fail(err)
+	}
+	return 0
+}
+
+func marketplaceURL(options marketplaceOptions) (string, error) {
+	parsed, err := url.Parse(options.baseURL)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return r.usageError("--url must be an absolute HTTP(S) URL")
+		return "", fmt.Errorf("--url must be an absolute HTTP(S) URL")
 	}
-	path := "/api/v1/schemas"
-	if *collection {
-		path = "/api/v1/collections"
-	}
-	values := url.Values{}
-	switch args[0] {
-	case "list":
-		values.Set("limit", strconv.Itoa(*limit))
-		if flags.NArg() != 0 {
-			return r.usageError("usage: infrahubctl marketplace list [flags]")
-		}
-	case "search":
-		if *query == "" && flags.NArg() == 1 {
-			*query = flags.Arg(0)
-		}
-		if *query == "" {
-			return r.usageError("marketplace search requires a query")
-		}
-		values.Set("search", *query)
-		values.Set("limit", strconv.Itoa(*limit))
-	case "show", "get":
-		if flags.NArg() != 1 {
-			return r.usageError("marketplace " + args[0] + " requires namespace/name")
-		}
-		parts := strings.Split(flags.Arg(0), "/")
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			return r.usageError("marketplace identifier must use namespace/name")
-		}
-		path += "/" + url.PathEscape(parts[0]) + "/" + url.PathEscape(parts[1])
-		if args[0] == "get" && !*collection {
-			path += "/download"
-		}
-	default:
-		return r.usageError("infrahubctl: unknown marketplace command " + args[0])
+	path, values, err := marketplaceEndpoint(options)
+	if err != nil {
+		return "", err
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/") + path
 	parsed.RawQuery = values.Encode()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	return parsed.String(), nil
+}
+
+func marketplaceEndpoint(options marketplaceOptions) (string, url.Values, error) {
+	path := "/api/v1/schemas"
+	if options.collection {
+		path = "/api/v1/collections"
+	}
+	values := url.Values{}
+	switch options.command {
+	case "list":
+		if len(options.args) != 0 {
+			return "", nil, fmt.Errorf("usage: infrahubctl marketplace list [flags]")
+		}
+		values.Set("limit", strconv.Itoa(options.limit))
+	case "search":
+		query := marketplaceSearchQuery(options)
+		if query == "" {
+			return "", nil, fmt.Errorf("marketplace search requires a query")
+		}
+		values.Set("search", query)
+		values.Set("limit", strconv.Itoa(options.limit))
+	case "show", "get":
+		identifier, err := marketplaceIdentifier(options)
+		if err != nil {
+			return "", nil, err
+		}
+		path += identifier
+		if options.command == "get" && !options.collection {
+			path += "/download"
+		}
+	default:
+		return "", nil, fmt.Errorf("infrahubctl: unknown marketplace command %s", options.command)
+	}
+	return path, values, nil
+}
+
+func marketplaceSearchQuery(options marketplaceOptions) string {
+	if options.query == "" && len(options.args) == 1 {
+		return options.args[0]
+	}
+	return options.query
+}
+
+func marketplaceIdentifier(options marketplaceOptions) (string, error) {
+	if len(options.args) != 1 {
+		return "", fmt.Errorf("marketplace %s requires namespace/name", options.command)
+	}
+	parts := strings.Split(options.args[0], "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", fmt.Errorf("marketplace identifier must use namespace/name")
+	}
+	return "/" + url.PathEscape(parts[0]) + "/" + url.PathEscape(parts[1]), nil
+}
+
+func fetchMarketplace(ctx context.Context, requestURL string) ([]byte, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return r.fail(err)
+		return nil, err
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("User-Agent", "infrahubctl")
 	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Do(request)
 	if err != nil {
-		return r.fail(err)
+		return nil, err
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, (16<<20)+1))
 	if err != nil {
-		return r.fail(err)
+		return nil, err
 	}
 	if len(body) > 16<<20 {
-		return r.fail(fmt.Errorf("marketplace response exceeds 16 MiB"))
+		return nil, fmt.Errorf("marketplace response exceeds 16 MiB")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return r.fail(fmt.Errorf("marketplace returned HTTP %d", response.StatusCode))
+		return nil, fmt.Errorf("marketplace returned HTTP %d", response.StatusCode)
 	}
-	if args[0] == "get" && *out != "" {
-		if err := os.WriteFile(*out, body, 0o600); err != nil {
-			return r.fail(err)
-		}
-		return 0
+	return body, nil
+}
+
+func (r Runner) writeMarketplaceResponse(options marketplaceOptions, body []byte) error {
+	if options.command == "get" && options.out != "" {
+		return os.WriteFile(options.out, body, 0o600)
 	}
 	var pretty bytes.Buffer
 	if json.Indent(&pretty, body, "", "  ") == nil {
 		body = append(pretty.Bytes(), '\n')
 	}
-	if _, err := r.Stdout.Write(body); err != nil {
-		return r.fail(err)
-	}
-	return 0
+	_, err := r.Stdout.Write(body)
+	return err
 }
