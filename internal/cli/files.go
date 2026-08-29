@@ -140,7 +140,11 @@ func parseObjectDocument(path string, document map[string]any) (objectDocument, 
 			return objectDocument{}, fmt.Errorf("%s: parameters.expand_range is not supported by the Go CLI yet", path)
 		}
 	}
-	rawData, ok := spec["data"].([]any)
+	return objectDocumentFromData(path, kind, spec["data"])
+}
+
+func objectDocumentFromData(path, kind string, value any) (objectDocument, error) {
+	rawData, ok := value.([]any)
 	if !ok || len(rawData) == 0 {
 		return objectDocument{}, fmt.Errorf("%s: spec.data must be a non-empty list", path)
 	}
