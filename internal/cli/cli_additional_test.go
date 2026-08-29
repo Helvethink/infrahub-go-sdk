@@ -107,6 +107,47 @@ func TestBranchReport(t *testing.T) {
 	}
 }
 
+func TestBranchCommandUsageErrors(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("unexpected request")
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantStderr string
+	}{
+		{name: "missing command", args: []string{"branch"}, wantStderr: "branch <list|get|create"},
+		{name: "unknown command", args: []string{"branch", "unknown"}, wantStderr: "branch <list|get|create"},
+		{name: "get missing name", args: []string{"branch", "get"}, wantStderr: "branch get <name>"},
+		{name: "get extra name", args: []string{"branch", "get", "one", "two"}, wantStderr: "branch get <name>"},
+		{name: "create missing name", args: []string{"branch", "create"}, wantStderr: "branch create [flags] <name>"},
+		{name: "create invalid flag", args: []string{"branch", "create", "--invalid"}},
+		{name: "operation missing name", args: []string{"branch", "delete"}, wantStderr: "branch delete <name>"},
+		{name: "report missing name", args: []string{"branch", "report"}, wantStderr: "branch report [flags] <name>"},
+		{name: "report invalid flag", args: []string{"branch", "report", "--invalid"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, stderr, exitCode := runCLI(t, server, test.args...)
+			if exitCode != 2 || !strings.Contains(stderr, test.wantStderr) {
+				t.Fatalf("exit=%d stderr=%q", exitCode, stderr)
+			}
+		})
+	}
+}
+
+func TestRunBranchRejectsUnknownCommand(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	exitCode := testRunner(&stdout, &stderr).runBranch(t.Context(), nil, []string{"unknown"})
+	if exitCode != 2 || !strings.Contains(stderr.String(), "unknown branch command unknown") {
+		t.Fatalf("exit=%d stderr=%q", exitCode, stderr.String())
+	}
+}
+
 func TestSchemaCommands(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
