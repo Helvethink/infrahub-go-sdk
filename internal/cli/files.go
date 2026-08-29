@@ -78,41 +78,48 @@ func readObjectFile(path string) ([]objectDocument, error) {
 	}
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".json":
+		return readJSONObjectFile(path, data)
+	case ".yaml", ".yml":
+		return readYAMLObjectFile(path, data)
+	default:
+		return nil, fmt.Errorf("%s: unsupported file extension", path)
+	}
+}
+
+func readJSONObjectFile(path string, data []byte) ([]objectDocument, error) {
+	var document map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
+		return nil, fmt.Errorf("%s: decode JSON: %w", path, err)
+	}
+	item, err := parseObjectDocument(path, document)
+	if err != nil {
+		return nil, err
+	}
+	return []objectDocument{item}, nil
+}
+
+func readYAMLObjectFile(path string, data []byte) ([]objectDocument, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var result []objectDocument
+	for {
 		var document map[string]any
-		decoder := json.NewDecoder(strings.NewReader(string(data)))
-		decoder.UseNumber()
-		if err := decoder.Decode(&document); err != nil {
-			return nil, fmt.Errorf("%s: decode JSON: %w", path, err)
+		err := decoder.Decode(&document)
+		if errors.Is(err, io.EOF) {
+			return result, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: decode YAML: %w", path, err)
+		}
+		if len(document) == 0 {
+			continue
 		}
 		item, err := parseObjectDocument(path, document)
 		if err != nil {
 			return nil, err
 		}
-		return []objectDocument{item}, nil
-	case ".yaml", ".yml":
-		decoder := yaml.NewDecoder(bytes.NewReader(data))
-		var result []objectDocument
-		for {
-			var document map[string]any
-			err := decoder.Decode(&document)
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return nil, fmt.Errorf("%s: decode YAML: %w", path, err)
-			}
-			if len(document) == 0 {
-				continue
-			}
-			item, err := parseObjectDocument(path, document)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, item)
-		}
-		return result, nil
-	default:
-		return nil, fmt.Errorf("%s: unsupported file extension", path)
+		result = append(result, item)
 	}
 }
 
