@@ -889,11 +889,23 @@ func readMenu(path string) (menuDocument, error) {
 }
 
 func prepareMenuItem(item map[string]any, index int) error {
+	if err := validateMenuItemRequiredFields(item); err != nil {
+		return err
+	}
+	setMenuItemDefaults(item, index)
+	return prepareMenuItemChildren(item)
+}
+
+func validateMenuItemRequiredFields(item map[string]any) error {
 	for _, key := range []string{"namespace", "name", "label"} {
 		if value, ok := item[key].(string); !ok || strings.TrimSpace(value) == "" {
 			return fmt.Errorf("%s must be a non-empty string", key)
 		}
 	}
+	return nil
+}
+
+func setMenuItemDefaults(item map[string]any, index int) {
 	if _, ok := item["order_weight"]; !ok {
 		item["order_weight"] = (index + 1) * 1000
 	}
@@ -902,15 +914,20 @@ func prepareMenuItem(item map[string]any, index int) error {
 			item["path"] = "/objects/" + kind
 		}
 	}
-	if children, ok := item["children"].([]any); ok {
-		for childIndex, raw := range children {
-			child, ok := raw.(map[string]any)
-			if !ok {
-				return fmt.Errorf("children[%d] must be an object", childIndex)
-			}
-			if err := prepareMenuItem(child, childIndex); err != nil {
-				return err
-			}
+}
+
+func prepareMenuItemChildren(item map[string]any) error {
+	children, ok := item["children"].([]any)
+	if !ok {
+		return nil
+	}
+	for childIndex, raw := range children {
+		child, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("children[%d] must be an object", childIndex)
+		}
+		if err := prepareMenuItem(child, childIndex); err != nil {
+			return err
 		}
 	}
 	return nil

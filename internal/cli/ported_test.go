@@ -362,6 +362,10 @@ func TestPrepareMenuItemValidation(t *testing.T) {
 	if children[0].(map[string]any)["order_weight"] != 1000 {
 		t.Fatalf("children = %#v", children)
 	}
+	item["children"] = []any{map[string]any{"namespace": "Main", "name": "child"}}
+	if err := prepareMenuItem(item, 0); err == nil || !strings.Contains(err.Error(), "label must be") {
+		t.Fatalf("child validation error = %v", err)
+	}
 	item["children"] = []any{"invalid"}
 	if err := prepareMenuItem(item, 0); err == nil {
 		t.Fatal("invalid child error = nil")
