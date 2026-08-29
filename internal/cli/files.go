@@ -190,23 +190,24 @@ func expandStructuredFiles(paths []string) ([]string, error) {
 			result = append(result, path)
 			continue
 		}
-		err = filepath.WalkDir(path, func(item string, entry fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() {
-				return nil
-			}
-			if isStructuredFile(item) {
-				result = append(result, item)
-			}
-			return nil
-		})
+		err = filepath.WalkDir(path, collectStructuredFile(&result))
 		if err != nil {
 			return nil, err
 		}
 	}
 	return result, nil
+}
+
+func collectStructuredFile(result *[]string) fs.WalkDirFunc {
+	return func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && isStructuredFile(path) {
+			*result = append(*result, path)
+		}
+		return nil
+	}
 }
 
 func isStructuredFile(path string) bool {
