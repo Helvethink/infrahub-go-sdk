@@ -389,6 +389,17 @@ func schemaNodeKinds(schema map[string]any, namespaces, excludes []string) []str
 }
 
 func dumpSelections(schema map[string]any, kind string) ([]node.Selection, error) {
+	definition, ok := findDumpSchemaDefinition(schema, kind)
+	if !ok {
+		return nil, fmt.Errorf("kind %q is not present in the branch schema", kind)
+	}
+	selections := dumpAttributeSelections(definition)
+	selections = append(selections, dumpRelationshipSelections(definition)...)
+	sort.Slice(selections, func(i, j int) bool { return selections[i].Name < selections[j].Name })
+	return selections, nil
+}
+
+func findDumpSchemaDefinition(schema map[string]any, kind string) (map[string]any, bool) {
 	for _, section := range []string{"generics", "nodes"} {
 		items, _ := schema[section].([]any)
 		for _, raw := range items {
@@ -396,44 +407,50 @@ func dumpSelections(schema map[string]any, kind string) ([]node.Selection, error
 			if !ok {
 				continue
 			}
-			definitionKind, _ := definition["kind"].(string)
-			if definitionKind == "" {
-				namespace, _ := definition["namespace"].(string)
-				name, _ := definition["name"].(string)
-				definitionKind = namespace + name
+			if schemaDefinitionKind(definition) == kind {
+				return definition, true
 			}
-			if definitionKind != kind {
-				continue
-			}
-			var selections []node.Selection
-			if attributes, ok := definition["attributes"].([]any); ok {
-				for _, rawAttribute := range attributes {
-					attribute, _ := rawAttribute.(map[string]any)
-					if name, ok := attribute["name"].(string); ok && name != "" {
-						selections = append(selections, node.Select(name, node.Select("value")))
-					}
-				}
-			}
-			if relationships, ok := definition["relationships"].([]any); ok {
-				for _, rawRelationship := range relationships {
-					relationship, _ := rawRelationship.(map[string]any)
-					name, _ := relationship["name"].(string)
-					cardinality, _ := relationship["cardinality"].(string)
-					if name == "" {
-						continue
-					}
-					if cardinality == "many" {
-						selections = append(selections, node.Select(name, node.Select("edges", node.Select("node", node.Select("id")))))
-					} else {
-						selections = append(selections, node.Select(name, node.Select("node", node.Select("id"))))
-					}
-				}
-			}
-			sort.Slice(selections, func(i, j int) bool { return selections[i].Name < selections[j].Name })
-			return selections, nil
 		}
 	}
-	return nil, fmt.Errorf("kind %q is not present in the branch schema", kind)
+	return nil, false
+}
+
+func dumpAttributeSelections(definition map[string]any) []node.Selection {
+	attributes, _ := definition["attributes"].([]any)
+	selections := make([]node.Selection, 0, len(attributes))
+	for _, raw := range attributes {
+		attribute, _ := raw.(map[string]any)
+		name, _ := attribute["name"].(string)
+		if name != "" {
+			selections = append(selections, node.Select(name, node.Select("value")))
+		}
+	}
+	return selections
+}
+
+func dumpRelationshipSelections(definition map[string]any) []node.Selection {
+	relationships, _ := definition["relationships"].([]any)
+	selections := make([]node.Selection, 0, len(relationships))
+	for _, raw := range relationships {
+		relationship, _ := raw.(map[string]any)
+		selection, ok := dumpRelationshipSelection(relationship)
+		if ok {
+			selections = append(selections, selection)
+		}
+	}
+	return selections
+}
+
+func dumpRelationshipSelection(relationship map[string]any) (node.Selection, bool) {
+	name, _ := relationship["name"].(string)
+	if name == "" {
+		return node.Selection{}, false
+	}
+	cardinality, _ := relationship["cardinality"].(string)
+	if cardinality == "many" {
+		return node.Select(name, node.Select("edges", node.Select("node", node.Select("id")))), true
+	}
+	return node.Select(name, node.Select("node", node.Select("id"))), true
 }
 
 func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch string, args []string) int {

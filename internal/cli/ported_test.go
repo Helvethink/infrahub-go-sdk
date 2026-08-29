@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
 )
 
 func TestGenerateProtocolsIsDeterministic(t *testing.T) {
@@ -59,6 +61,36 @@ func TestDumpSchemaHelpers(t *testing.T) {
 	selections, err := dumpSelections(schema, "InfraDevice")
 	if err != nil || len(selections) != 1 || selections[0].Name != "name" {
 		t.Fatalf("selections=%#v err=%v", selections, err)
+	}
+}
+
+func TestDumpSelectionsBuildsSortedDynamicFields(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{"generics": []any{
+		"invalid",
+		map[string]any{
+			"namespace": "Core", "name": "Asset",
+			"attributes": []any{
+				"invalid",
+				map[string]any{"name": "zeta"},
+				map[string]any{"name": ""},
+			},
+			"relationships": []any{
+				"invalid",
+				map[string]any{"name": "owner", "cardinality": "one"},
+				map[string]any{"name": "members", "cardinality": "many"},
+				map[string]any{"name": ""},
+			},
+		},
+	}}
+	want := []node.Selection{
+		node.Select("members", node.Select("edges", node.Select("node", node.Select("id")))),
+		node.Select("owner", node.Select("node", node.Select("id"))),
+		node.Select("zeta", node.Select("value")),
+	}
+	got, err := dumpSelections(schema, "CoreAsset")
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("selections=%#v, want %#v, err=%v", got, want, err)
 	}
 }
 
