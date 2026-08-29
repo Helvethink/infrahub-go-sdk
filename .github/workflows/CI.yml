@@ -47,7 +47,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.2
 
       - name: Lint Dockerfile
         uses: hadolint/hadolint-action@v3.4.0
