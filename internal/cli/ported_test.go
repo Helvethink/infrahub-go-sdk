@@ -31,6 +31,37 @@ func TestGenerateProtocolsIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestGenerateProtocolsSkipsInvalidSchemaEntries(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{
+		"generics": []any{
+			"invalid",
+			map[string]any{},
+			map[string]any{
+				"kind":       "CoreAsset",
+				"attributes": []any{"invalid", map[string]any{"name": 42}},
+				"relationships": []any{
+					"invalid",
+					map[string]any{"name": "owner"},
+					map[string]any{"name": "site", "peer": "LocationSite"},
+				},
+			},
+		},
+		"nodes": []any{map[string]any{"kind": "BuiltinTag"}},
+	}
+
+	result, err := generateProtocols(schema, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Index(result, "class BuiltinTag") > strings.Index(result, "class CoreAsset") {
+		t.Fatalf("definitions are not sorted: %s", result)
+	}
+	if !strings.Contains(result, "    site: LocationSite\n") || strings.Contains(result, "owner:") {
+		t.Fatalf("invalid relationships were not filtered: %s", result)
+	}
+}
+
 func TestMarketplaceSearchUsesMarketplaceAPIWithoutInfrahubConfig(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

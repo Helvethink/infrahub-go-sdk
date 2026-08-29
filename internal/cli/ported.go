@@ -1172,69 +1172,106 @@ func mergeSchemaDocuments(documents []map[string]any) map[string]any {
 	return merged
 }
 
+type protocolField struct {
+	Name string
+	Type string
+}
+
+type protocolDefinition struct {
+	Kind   string
+	Fields []protocolField
+}
+
 func generateProtocols(schema map[string]any, syncMode bool) (string, error) {
-	type field struct {
-		Name string
-		Type string
-	}
-	type definition struct {
-		Kind   string
-		Fields []field
-	}
-	var definitions []definition
-	for _, section := range []string{"generics", "nodes"} {
-		items, _ := schema[section].([]any)
-		for _, raw := range items {
-			item, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			kind, _ := item["kind"].(string)
-			if kind == "" {
-				namespace, _ := item["namespace"].(string)
-				name, _ := item["name"].(string)
-				kind = namespace + name
-			}
-			if kind == "" {
-				continue
-			}
-			definition := definition{Kind: kind}
-			if attrs, ok := item["attributes"].([]any); ok {
-				for _, attrRaw := range attrs {
-					if attr, ok := attrRaw.(map[string]any); ok {
-						if name, ok := attr["name"].(string); ok {
-							definition.Fields = append(definition.Fields, field{Name: name, Type: protocolAttributeType(attr)})
-						}
-					}
-				}
-			}
-			if relationships, ok := item["relationships"].([]any); ok {
-				for _, relationshipRaw := range relationships {
-					relationship, _ := relationshipRaw.(map[string]any)
-					name, _ := relationship["name"].(string)
-					peer, _ := relationship["peer"].(string)
-					cardinality, _ := relationship["cardinality"].(string)
-					if name == "" || peer == "" {
-						continue
-					}
-					fieldType := peer
-					if cardinality == "many" {
-						fieldType = "Sequence[" + peer + "]"
-					}
-					if optional, _ := relationship["optional"].(bool); optional {
-						fieldType += " | None"
-					}
-					definition.Fields = append(definition.Fields, field{Name: name, Type: fieldType})
-				}
-			}
-			sort.Slice(definition.Fields, func(i, j int) bool { return definition.Fields[i].Name < definition.Fields[j].Name })
-			definitions = append(definitions, definition)
-		}
-	}
+	definitions := protocolDefinitions(schema)
 	if len(definitions) == 0 {
 		return "", fmt.Errorf("schema does not contain node or generic definitions")
 	}
 	sort.Slice(definitions, func(i, j int) bool { return definitions[i].Kind < definitions[j].Kind })
+	return renderProtocols(definitions, syncMode), nil
+}
+
+func protocolDefinitions(schema map[string]any) []protocolDefinition {
+	var definitions []protocolDefinition
+	for _, section := range []string{"generics", "nodes"} {
+		items, _ := schema[section].([]any)
+		for _, raw := range items {
+			if definition, ok := newProtocolDefinition(raw); ok {
+				definitions = append(definitions, definition)
+			}
+		}
+	}
+	return definitions
+}
+
+func newProtocolDefinition(raw any) (protocolDefinition, bool) {
+	item, ok := raw.(map[string]any)
+	if !ok {
+		return protocolDefinition{}, false
+	}
+	kind := protocolKind(item)
+	if kind == "" {
+		return protocolDefinition{}, false
+	}
+	fields := append(protocolAttributeFields(item), protocolRelationshipFields(item)...)
+	sort.Slice(fields, func(i, j int) bool { return fields[i].Name < fields[j].Name })
+	return protocolDefinition{Kind: kind, Fields: fields}, true
+}
+
+func protocolKind(item map[string]any) string {
+	kind, _ := item["kind"].(string)
+	if kind != "" {
+		return kind
+	}
+	namespace, _ := item["namespace"].(string)
+	name, _ := item["name"].(string)
+	return namespace + name
+}
+
+func protocolAttributeFields(item map[string]any) []protocolField {
+	attributes, _ := item["attributes"].([]any)
+	fields := make([]protocolField, 0, len(attributes))
+	for _, raw := range attributes {
+		attribute, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if name, ok := attribute["name"].(string); ok {
+			fields = append(fields, protocolField{Name: name, Type: protocolAttributeType(attribute)})
+		}
+	}
+	return fields
+}
+
+func protocolRelationshipFields(item map[string]any) []protocolField {
+	relationships, _ := item["relationships"].([]any)
+	fields := make([]protocolField, 0, len(relationships))
+	for _, raw := range relationships {
+		if field, ok := protocolRelationshipField(raw); ok {
+			fields = append(fields, field)
+		}
+	}
+	return fields
+}
+
+func protocolRelationshipField(raw any) (protocolField, bool) {
+	relationship, _ := raw.(map[string]any)
+	name, _ := relationship["name"].(string)
+	peer, _ := relationship["peer"].(string)
+	if name == "" || peer == "" {
+		return protocolField{}, false
+	}
+	fieldType := peer
+	if cardinality, _ := relationship["cardinality"].(string); cardinality == "many" {
+		fieldType = "Sequence[" + peer + "]"
+	}
+	if optional, _ := relationship["optional"].(bool); optional {
+		fieldType += " | None"
+	}
+	return protocolField{Name: name, Type: fieldType}, true
+}
+
+func renderProtocols(definitions []protocolDefinition, syncMode bool) string {
 	var output strings.Builder
 	output.WriteString("# Generated by infrahubctl protocols. DO NOT EDIT.\nfrom __future__ import annotations\nfrom datetime import datetime\nfrom typing import Any, Protocol, Sequence\n\n")
 	if syncMode {
@@ -1247,7 +1284,7 @@ func generateProtocols(schema map[string]any, syncMode bool) (string, error) {
 		}
 		output.WriteString("\n")
 	}
-	return output.String(), nil
+	return output.String()
 }
 
 func protocolAttributeType(attribute map[string]any) string {
