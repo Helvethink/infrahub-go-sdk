@@ -292,6 +292,28 @@ func TestDumpRelationshipHelpers(t *testing.T) {
 	}
 }
 
+func TestManyRelationshipIdentifiersFiltersDuplicatesAndSorts(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{"nodes": []any{
+		map[string]any{
+			"namespace": "Infra", "name": "Device",
+			"relationships": []any{
+				map[string]any{"identifier": "z_links", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+				map[string]any{"identifier": "z_links", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+				map[string]any{"identifier": "a_links", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+				map[string]any{"identifier": "required_links", "peer": "InfraInterface", "cardinality": "many", "optional": false},
+				map[string]any{"identifier": "missing_peer", "peer": "InfraMissing", "cardinality": "many", "optional": true},
+				map[string]any{"identifier": "", "peer": "InfraInterface", "cardinality": "many", "optional": true},
+			},
+		},
+		map[string]any{"kind": "InfraInterface"},
+	}}
+	want := []string{"a_links", "z_links"}
+	if got := manyRelationshipIdentifiers(schema, []string{"InfraDevice", "InfraInterface"}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("relationship identifiers = %#v, want %#v", got, want)
+	}
+}
+
 func TestPrepareMenuItemValidation(t *testing.T) {
 	t.Parallel()
 	if err := prepareMenuItem(map[string]any{"name": "item", "label": "Item"}, 0); err == nil {

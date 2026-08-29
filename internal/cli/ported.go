@@ -298,36 +298,56 @@ func manyRelationshipIdentifiers(schema map[string]any, kinds []string) []string
 	items, _ := schema["nodes"].([]any)
 	for _, raw := range items {
 		definition, _ := raw.(map[string]any)
-		kind, _ := definition["kind"].(string)
-		if kind == "" {
-			namespace, _ := definition["namespace"].(string)
-			name, _ := definition["name"].(string)
-			kind = namespace + name
-		}
-		if _, ok := selected[kind]; !ok {
+		if _, ok := selected[schemaDefinitionKind(definition)]; !ok {
 			continue
 		}
-		relationships, _ := definition["relationships"].([]any)
-		for _, rawRelationship := range relationships {
-			relationship, _ := rawRelationship.(map[string]any)
-			cardinality, _ := relationship["cardinality"].(string)
-			optional, _ := relationship["optional"].(bool)
-			identifier, _ := relationship["identifier"].(string)
-			peer, _ := relationship["peer"].(string)
-			if cardinality != "many" || !optional || identifier == "" {
-				continue
-			}
-			if _, ok := selected[peer]; !ok {
-				continue
-			}
-			if _, ok := seen[identifier]; !ok {
-				seen[identifier] = struct{}{}
-				result = append(result, identifier)
-			}
-		}
+		result = appendManyRelationshipIdentifiers(result, definition, selected, seen)
 	}
 	sort.Strings(result)
 	return result
+}
+
+func schemaDefinitionKind(definition map[string]any) string {
+	if kind, _ := definition["kind"].(string); kind != "" {
+		return kind
+	}
+	namespace, _ := definition["namespace"].(string)
+	name, _ := definition["name"].(string)
+	return namespace + name
+}
+
+func appendManyRelationshipIdentifiers(
+	result []string,
+	definition map[string]any,
+	selected map[string]struct{},
+	seen map[string]struct{},
+) []string {
+	relationships, _ := definition["relationships"].([]any)
+	for _, raw := range relationships {
+		relationship, _ := raw.(map[string]any)
+		identifier, ok := eligibleManyRelationshipIdentifier(relationship, selected)
+		if !ok {
+			continue
+		}
+		if _, duplicate := seen[identifier]; duplicate {
+			continue
+		}
+		seen[identifier] = struct{}{}
+		result = append(result, identifier)
+	}
+	return result
+}
+
+func eligibleManyRelationshipIdentifier(relationship map[string]any, selected map[string]struct{}) (string, bool) {
+	cardinality, _ := relationship["cardinality"].(string)
+	optional, _ := relationship["optional"].(bool)
+	identifier, _ := relationship["identifier"].(string)
+	if cardinality != "many" || !optional || identifier == "" {
+		return "", false
+	}
+	peer, _ := relationship["peer"].(string)
+	_, selectedPeer := selected[peer]
+	return identifier, selectedPeer
 }
 
 func schemaNodeKinds(schema map[string]any, namespaces, excludes []string) []string {
