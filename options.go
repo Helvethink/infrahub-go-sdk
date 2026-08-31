@@ -13,6 +13,7 @@ const (
 	defaultUserAgent    = "infrahub-go-sdk/dev"
 )
 
+// defaultHTTPClient creates the SDK's default HTTP client.
 func defaultHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: defaultTimeout,
@@ -22,6 +23,7 @@ func defaultHTTPClient() *http.Client {
 	}
 }
 
+// config contains validated root-client configuration.
 type config struct {
 	httpClient   *http.Client
 	token        string

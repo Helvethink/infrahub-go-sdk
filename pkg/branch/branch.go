@@ -13,32 +13,49 @@ import (
 type Status string
 
 const (
-	StatusOpen              Status = "OPEN"
-	StatusNeedRebase        Status = "NEED_REBASE"
+	// StatusOpen identifies a branch available for changes.
+	StatusOpen Status = "OPEN"
+	// StatusNeedRebase identifies a branch that must be rebased.
+	StatusNeedRebase Status = "NEED_REBASE"
+	// StatusNeedUpgradeRebase identifies a branch that requires an upgrade rebase.
 	StatusNeedUpgradeRebase Status = "NEED_UPGRADE_REBASE"
-	StatusDeleting          Status = "DELETING"
-	StatusMerging           Status = "MERGING"
-	StatusMerged            Status = "MERGED"
+	// StatusDeleting identifies a branch being deleted.
+	StatusDeleting Status = "DELETING"
+	// StatusMerging identifies a branch being merged.
+	StatusMerging Status = "MERGING"
+	// StatusMerged identifies a branch that has been merged.
+	StatusMerged Status = "MERGED"
 )
 
 const fields = `id name description origin_branch branched_from is_default sync_with_git has_schema_changes graph_version status`
 
 // Branch is an Infrahub branch.
 type Branch struct {
-	ID               string  `json:"id"`
-	Name             string  `json:"name"`
-	Description      *string `json:"description"`
-	OriginBranch     *string `json:"origin_branch"`
-	BranchedFrom     string  `json:"branched_from"`
-	IsDefault        bool    `json:"is_default"`
-	SyncWithGit      bool    `json:"sync_with_git"`
-	HasSchemaChanges bool    `json:"has_schema_changes"`
-	GraphVersion     *int    `json:"graph_version"`
-	Status           Status  `json:"status"`
+	// ID is the stable Infrahub identifier.
+	ID string `json:"id"`
+	// Name is the human-readable name.
+	Name string `json:"name"`
+	// Description contains the optional human-readable description.
+	Description *string `json:"description"`
+	// OriginBranch names the branch from which this branch originated.
+	OriginBranch *string `json:"origin_branch"`
+	// BranchedFrom contains the source branch revision.
+	BranchedFrom string `json:"branched_from"`
+	// IsDefault reports whether this is the server's default branch.
+	IsDefault bool `json:"is_default"`
+	// SyncWithGit reports whether Git synchronization is enabled.
+	SyncWithGit bool `json:"sync_with_git"`
+	// HasSchemaChanges reports whether the branch changes the schema.
+	HasSchemaChanges bool `json:"has_schema_changes"`
+	// GraphVersion identifies the current graph revision when available.
+	GraphVersion *int `json:"graph_version"`
+	// Status is the current lifecycle status.
+	Status Status `json:"status"`
 }
 
 // Client is the minimal protocol required by Service.
 type Client interface {
+	// Execute runs a GraphQL operation and decodes its data.
 	Execute(context.Context, api.GraphQLRequest, any) error
 }
 
@@ -50,7 +67,9 @@ func NewService(client Client) *Service { return &Service{client: client} }
 
 // CreateOptions configures branch creation.
 type CreateOptions struct {
+	// Description contains the optional human-readable description.
 	Description string
+	// SyncWithGit enables Git synchronization for the new branch.
 	SyncWithGit bool
 }
 
@@ -125,6 +144,7 @@ func (s *Service) Merge(ctx context.Context, name string) error {
 	return s.simpleMutation(ctx, "BranchMerge", name)
 }
 
+// simpleMutation executes a name-based branch mutation and verifies its ok flag.
 func (s *Service) simpleMutation(ctx context.Context, operation, name string) error {
 	var data map[string]struct {
 		OK bool `json:"ok"`
@@ -192,6 +212,7 @@ func (s *Service) DiffData(ctx context.Context, branch string, branchOnly bool, 
 	return nil
 }
 
+// nullableDiffValue converts an empty diff value to GraphQL null.
 func nullableDiffValue(value string) any {
 	if value == "" {
 		return nil

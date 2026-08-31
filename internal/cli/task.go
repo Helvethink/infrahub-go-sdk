@@ -9,6 +9,7 @@ import (
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 )
 
+// runTask runs the task.
 func (r Runner) runTask(ctx context.Context, client *infrahub.Client, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl [global flags] task <list>")

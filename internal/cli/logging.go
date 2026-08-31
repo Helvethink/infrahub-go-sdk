@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// newCLILogger creates the cli logger.
 func newCLILogger(output io.Writer, level zapcore.Level) *zap.Logger {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -21,6 +22,7 @@ func newCLILogger(output io.Writer, level zapcore.Level) *zap.Logger {
 	return zap.New(core)
 }
 
+// parseLogLevel parses the log level.
 func parseLogLevel(value string) (zapcore.Level, bool, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "debug":

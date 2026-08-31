@@ -2,6 +2,7 @@ package cli
 
 import "strings"
 
+// filterSchemaKinds filters the schema kinds.
 func filterSchemaKinds(schema any, needle string) []any {
 	needle = strings.ToLower(needle)
 	items := schemaCollections(schema)
@@ -14,6 +15,7 @@ func filterSchemaKinds(schema any, needle string) []any {
 	return result
 }
 
+// findSchemaKind finds the schema kind.
 func findSchemaKind(schema any, kind string) (any, bool) {
 	for _, item := range schemaCollections(schema) {
 		if kindName(item) == kind {
@@ -23,6 +25,7 @@ func findSchemaKind(schema any, kind string) (any, bool) {
 	return nil, false
 }
 
+// schemaCollections returns schema node and generic collections from a document.
 func schemaCollections(schema any) []any {
 	root, ok := schema.(map[string]any)
 	if !ok {
@@ -39,6 +42,7 @@ func schemaCollections(schema any) []any {
 	return result
 }
 
+// kindName extracts a schema kind name from supported schema shapes.
 func kindName(value any) string {
 	item, ok := value.(map[string]any)
 	if !ok {

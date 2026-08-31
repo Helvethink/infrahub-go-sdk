@@ -26,17 +26,23 @@ type Options struct {
 // Result is the outcome of one started job. Index identifies its position in
 // the input slice. Results returned by Run are sorted by Index.
 type Result[T any] struct {
+	// Index is the input position associated with the result.
 	Index int
+	// Value contains the successful result value.
 	Value T
-	Err   error
+	// Err is the underlying error.
+	Err error
 }
 
 // Error reports the first failed job selected by input order in fail-fast mode.
 type Error struct {
+	// Index is the input position associated with the result.
 	Index int
-	Err   error
+	// Err is the underlying error.
+	Err error
 }
 
+// Error reports the index and cause of a failed job.
 func (e *Error) Error() string {
 	return fmt.Sprintf("infrahub: batch job %d failed: %v", e.Index, e.Err)
 }
@@ -130,6 +136,7 @@ func Run[T any](ctx context.Context, jobs []Job[T], options Options) ([]Result[T
 	return results, nil
 }
 
+// indexedJob holds internal data used by the indexed job workflow.
 type indexedJob[T any] struct {
 	index int
 	job   Job[T]

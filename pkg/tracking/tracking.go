@@ -22,6 +22,7 @@ var kindPattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
 
 // Executor is the minimal GraphQL behavior required to save a Group.
 type Executor interface {
+	// Execute runs a GraphQL operation and decodes its data.
 	Execute(context.Context, api.GraphQLRequest, any) error
 }
 
@@ -33,12 +34,18 @@ func WithTracker(ctx context.Context, tracker string) context.Context {
 
 // GroupOptions configures a request-scoped tracking group.
 type GroupOptions struct {
-	Identifier  string
-	Params      map[string]string
+	// Identifier is the object or resource identifier.
+	Identifier string
+	// Params contains the params value.
+	Params map[string]string
+	// Description contains the optional human-readable description.
 	Description string
-	GroupKind   string
+	// GroupKind contains the group kind value.
+	GroupKind string
+	// GroupFields contains the group fields value.
 	GroupFields map[string]any
-	Branch      string
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
 }
 
 // Group safely collects node IDs and persists them as an Infrahub group.
@@ -57,8 +64,11 @@ type Group struct {
 
 // GroupResult identifies the group created or updated by Save.
 type GroupResult struct {
-	ID           string `json:"id"`
-	Kind         string `json:"kind"`
+	// ID is the stable Infrahub identifier.
+	ID string `json:"id"`
+	// Kind is the Infrahub schema kind.
+	Kind string `json:"kind"`
+	// DisplayLabel is the human-readable display label.
 	DisplayLabel string `json:"display_label"`
 }
 
@@ -168,6 +178,7 @@ func (g *Group) Save(ctx context.Context, client Executor) (*GroupResult, error)
 	return result.Object, nil
 }
 
+// isGraphQLName reports whether value is a valid GraphQL name.
 func isGraphQLName(value string) bool {
 	if value == "" || value[0] != '_' && !isLetter(value[0]) {
 		return false
@@ -180,6 +191,7 @@ func isGraphQLName(value string) bool {
 	return true
 }
 
+// isLetter reports whether value is an ASCII letter.
 func isLetter(value byte) bool {
 	return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z'
 }

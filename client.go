@@ -24,17 +24,28 @@ import (
 type Client struct {
 	protocol *api.Client
 
-	Branches      *branch.Service
-	Automation    *automation.Service
-	Diffs         *diffservice.Service
-	Schema        *schema.Service
-	Nodes         *node.Service
-	Repositories  *repository.Service
+	// Branches provides branch lifecycle operations.
+	Branches *branch.Service
+	// Automation provides transform, generator, check, and named-query operations.
+	Automation *automation.Service
+	// Diffs provides branch diff summaries and trees.
+	Diffs *diffservice.Service
+	// Schema provides schema discovery, validation, and loading operations.
+	Schema *schema.Service
+	// Nodes provides generic operations for schema-defined nodes.
+	Nodes *node.Service
+	// Repositories provides repository discovery and commit operations.
+	Repositories *repository.Service
+	// ResourcePools provides resource allocation and utilization operations.
 	ResourcePools *resourcepool.Service
-	ObjectStore   *objectstore.Service
-	Tasks         *task.Service
-	Telemetry     *telemetry.Service
-	Traversal     *traversal.Service
+	// ObjectStore provides stored-object and text-file operations.
+	ObjectStore *objectstore.Service
+	// Tasks provides background-task lookup, filtering, and polling operations.
+	Tasks *task.Service
+	// Telemetry provides telemetry snapshot operations.
+	Telemetry *telemetry.Service
+	// Traversal provides graph path and reachable-node operations.
+	Traversal *traversal.Service
 }
 
 // NewClient creates an Infrahub client for address.

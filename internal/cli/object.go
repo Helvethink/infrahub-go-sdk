@@ -11,6 +11,7 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/node"
 )
 
+// runObject runs the object.
 func (r Runner) runObject(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl [global flags] object <get|create|update|delete>")
@@ -33,6 +34,7 @@ func (r Runner) runObject(ctx context.Context, client *infrahub.Client, branch s
 	}
 }
 
+// runObjectGet runs the object get.
 func (r Runner) runObjectGet(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("object get", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -80,6 +82,7 @@ func (r Runner) runObjectGet(ctx context.Context, client *infrahub.Client, branc
 	return r.writeJSON(page)
 }
 
+// runObjectCreate runs the object create.
 func (r Runner) runObjectCreate(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("object create", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -104,6 +107,7 @@ func (r Runner) runObjectCreate(ctx context.Context, client *infrahub.Client, br
 	return r.writeJSON(node)
 }
 
+// runObjectUpdate runs the object update.
 func (r Runner) runObjectUpdate(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("object update", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -129,6 +133,7 @@ func (r Runner) runObjectUpdate(ctx context.Context, client *infrahub.Client, br
 	return r.writeJSON(node)
 }
 
+// runObjectDelete runs the object delete.
 func (r Runner) runObjectDelete(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("object delete", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -153,6 +158,7 @@ func (r Runner) runObjectDelete(ctx context.Context, client *infrahub.Client, br
 	return 0
 }
 
+// objectMutationData parses mutation assignments and injects an optional node ID.
 func objectMutationData(values []string, file string) (map[string]any, error) {
 	if len(values) > 0 && file != "" {
 		return nil, fmt.Errorf("--set and --file are mutually exclusive")
@@ -166,6 +172,7 @@ func objectMutationData(values []string, file string) (map[string]any, error) {
 	return parseAssignments(values, true)
 }
 
+// runObjectLoad runs the object load.
 func (r Runner) runObjectLoad(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("object load", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -193,6 +200,7 @@ func (r Runner) runObjectLoad(ctx context.Context, client *infrahub.Client, bran
 	return r.writeJSON(map[string]any{"count": len(results), "objects": results})
 }
 
+// runObjectValidate runs the object valIDate.
 func (r Runner) runObjectValidate(args []string) int {
 	command := flag.NewFlagSet("object validate", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)

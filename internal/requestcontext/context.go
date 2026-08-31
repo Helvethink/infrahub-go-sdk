@@ -3,6 +3,7 @@ package requestcontext
 
 import "context"
 
+// key identifies values stored in request contexts.
 type key int
 
 const (
@@ -12,6 +13,7 @@ const (
 
 // Recorder collects Infrahub node IDs observed during a request workflow.
 type Recorder interface {
+	// RecordNodeIDs records node identifiers observed during a request workflow.
 	RecordNodeIDs(...string)
 }
 

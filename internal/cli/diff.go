@@ -9,6 +9,7 @@ import (
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 )
 
+// runDiff runs the diff.
 func (r Runner) runDiff(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl [global flags] diff <tree|summary>")
@@ -57,6 +58,7 @@ func (r Runner) runDiff(ctx context.Context, client *infrahub.Client, branch str
 	}
 }
 
+// parseOptionalTime parses the optional time.
 func parseOptionalTime(value string) (time.Time, error) {
 	if value == "" {
 		return time.Time{}, nil

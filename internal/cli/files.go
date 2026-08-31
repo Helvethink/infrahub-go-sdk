@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// readSchemaDocuments reads the schema documents.
 func readSchemaDocuments(paths []string) ([]map[string]any, error) {
 	files, err := expandStructuredFiles(paths)
 	if err != nil {
@@ -36,6 +37,7 @@ func readSchemaDocuments(paths []string) ([]map[string]any, error) {
 	return documents, nil
 }
 
+// readDataFile reads the data file.
 func readDataFile(path string) (map[string]any, error) {
 	document, err := readMapFile(path)
 	if err != nil {
@@ -47,11 +49,13 @@ func readDataFile(path string) (map[string]any, error) {
 	return document, nil
 }
 
+// objectDocument holds internal data used by the object document workflow.
 type objectDocument struct {
 	Kind string
 	Data []map[string]any
 }
 
+// readObjectDocuments reads the object documents.
 func readObjectDocuments(paths []string) ([]objectDocument, error) {
 	files, err := expandStructuredFiles(paths)
 	if err != nil {
@@ -71,6 +75,7 @@ func readObjectDocuments(paths []string) ([]objectDocument, error) {
 	return documents, nil
 }
 
+// readObjectFile reads the object file.
 func readObjectFile(path string) ([]objectDocument, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -86,6 +91,7 @@ func readObjectFile(path string) ([]objectDocument, error) {
 	}
 }
 
+// readJSONObjectFile reads the JSON object file.
 func readJSONObjectFile(path string, data []byte) ([]objectDocument, error) {
 	var document map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -100,6 +106,7 @@ func readJSONObjectFile(path string, data []byte) ([]objectDocument, error) {
 	return []objectDocument{item}, nil
 }
 
+// readYAMLObjectFile reads the yaml object file.
 func readYAMLObjectFile(path string, data []byte) ([]objectDocument, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	var result []objectDocument
@@ -123,6 +130,7 @@ func readYAMLObjectFile(path string, data []byte) ([]objectDocument, error) {
 	}
 }
 
+// parseObjectDocument parses the object document.
 func parseObjectDocument(path string, document map[string]any) (objectDocument, error) {
 	if document["apiVersion"] != "infrahub.app/v1" || document["kind"] != "Object" {
 		return objectDocument{}, fmt.Errorf("%s: expected apiVersion infrahub.app/v1 and kind Object", path)
@@ -143,6 +151,7 @@ func parseObjectDocument(path string, document map[string]any) (objectDocument, 
 	return objectDocumentFromData(path, kind, spec["data"])
 }
 
+// objectDocumentFromData extracts a kind and mutation data from a decoded document.
 func objectDocumentFromData(path, kind string, value any) (objectDocument, error) {
 	rawData, ok := value.([]any)
 	if !ok || len(rawData) == 0 {
@@ -159,6 +168,7 @@ func objectDocumentFromData(path, kind string, value any) (objectDocument, error
 	return objectDocument{Kind: kind, Data: data}, nil
 }
 
+// normalizeObjectData normalizes the object data.
 func normalizeObjectData(input map[string]any) map[string]any {
 	output := make(map[string]any, len(input))
 	for key, value := range input {
@@ -172,6 +182,7 @@ func normalizeObjectData(input map[string]any) map[string]any {
 	return output
 }
 
+// normalizeObjectValue normalizes the object value.
 func normalizeObjectValue(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:
@@ -183,6 +194,7 @@ func normalizeObjectValue(value any) any {
 	}
 }
 
+// expandStructuredFiles expands the structured files.
 func expandStructuredFiles(paths []string) ([]string, error) {
 	result := make([]string, 0, len(paths))
 	for _, path := range paths {
@@ -202,6 +214,7 @@ func expandStructuredFiles(paths []string) ([]string, error) {
 	return result, nil
 }
 
+// collectStructuredFile collects the structured file.
 func collectStructuredFile(result *[]string) fs.WalkDirFunc {
 	return func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -214,6 +227,7 @@ func collectStructuredFile(result *[]string) fs.WalkDirFunc {
 	}
 }
 
+// isStructuredFile reports whether path has a supported JSON or YAML extension.
 func isStructuredFile(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".json", ".yaml", ".yml":
@@ -223,6 +237,7 @@ func isStructuredFile(path string) bool {
 	}
 }
 
+// readMapFile reads the map file.
 func readMapFile(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

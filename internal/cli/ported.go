@@ -24,12 +24,14 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/telemetry"
 )
 
+// dumpRecord holds internal data used by the dump record workflow.
 type dumpRecord struct {
 	ID          string `json:"id"`
 	Kind        string `json:"kind"`
 	GraphQLJSON string `json:"graphql_json"`
 }
 
+// dumpOptions holds internal data used by the dump options workflow.
 type dumpOptions struct {
 	directory  string
 	branch     string
@@ -39,17 +41,20 @@ type dumpOptions struct {
 	excludes   []string
 }
 
+// dumpPaths holds internal data used by the dump paths workflow.
 type dumpPaths struct {
 	nodes         string
 	relationships string
 }
 
+// dumpPlan holds internal data used by the dump plan workflow.
 type dumpPlan struct {
 	schema           map[string]any
 	kinds            []string
 	selectionsByKind map[string][]node.Selection
 }
 
+// runDump runs the dump.
 func (r Runner) runDump(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	flags := flag.NewFlagSet("dump", flag.ContinueOnError)
 	flags.SetOutput(r.Stderr)
@@ -81,6 +86,7 @@ func (r Runner) runDump(ctx context.Context, client *infrahub.Client, branch str
 	})
 }
 
+// executeDump executes the dump.
 func (r Runner) executeDump(ctx context.Context, client *infrahub.Client, options dumpOptions) int {
 	paths, err := prepareDumpPaths(options.directory)
 	if err != nil {
@@ -96,6 +102,7 @@ func (r Runner) executeDump(ctx context.Context, client *infrahub.Client, option
 	return r.exportDump(ctx, client, options, paths, plan)
 }
 
+// prepareDumpPaths prepares the dump paths.
 func prepareDumpPaths(directory string) (dumpPaths, error) {
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return dumpPaths{}, fmt.Errorf("create dump directory: %w", err)
@@ -114,6 +121,7 @@ func prepareDumpPaths(directory string) (dumpPaths, error) {
 	return paths, nil
 }
 
+// validateDumpNamespaces validates the dump namespaces.
 func validateDumpNamespaces(namespaces []string) error {
 	for _, namespace := range namespaces {
 		if namespace == "Internal" || namespace == "Infrahub" || namespace == "Schema" {
@@ -123,6 +131,7 @@ func validateDumpNamespaces(namespaces []string) error {
 	return nil
 }
 
+// prepareDumpPlan prepares the dump plan.
 func prepareDumpPlan(ctx context.Context, client *infrahub.Client, options dumpOptions) (dumpPlan, error) {
 	var rawSchema map[string]any
 	if err := client.Schema.Fetch(ctx, options.branch, options.namespaces, &rawSchema); err != nil {
@@ -146,6 +155,7 @@ func prepareDumpPlan(ctx context.Context, client *infrahub.Client, options dumpO
 	return dumpPlan{schema: rawSchema, kinds: kinds, selectionsByKind: selectionsByKind}, nil
 }
 
+// exportDump writes node and relationship dump files from the prepared plan.
 func (r Runner) exportDump(
 	ctx context.Context,
 	client *infrahub.Client,
@@ -171,6 +181,7 @@ func (r Runner) exportDump(
 	return r.writeJSON(map[string]any{"nodes": count, "directory": options.directory})
 }
 
+// writeDumpNodes writes the dump nodes.
 func writeDumpNodes(
 	ctx context.Context,
 	client *infrahub.Client,
@@ -195,6 +206,7 @@ func writeDumpNodes(
 	return temporaryPath, count, nil
 }
 
+// encodeDumpNodes encodes the dump nodes.
 func encodeDumpNodes(
 	ctx context.Context,
 	client *infrahub.Client,
@@ -213,6 +225,7 @@ func encodeDumpNodes(
 	return count, nil
 }
 
+// encodeDumpKind encodes the dump kind.
 func encodeDumpKind(
 	ctx context.Context,
 	client *infrahub.Client,
@@ -240,6 +253,7 @@ func encodeDumpKind(
 	}
 }
 
+// encodeDumpPage encodes the dump page.
 func encodeDumpPage(encoder *json.Encoder, kind string, items []node.Node) (int, error) {
 	for _, item := range items {
 		payload, err := json.Marshal(item.Fields)
@@ -253,6 +267,7 @@ func encodeDumpPage(encoder *json.Encoder, kind string, items []node.Node) (int,
 	return len(items), nil
 }
 
+// fetchDumpRelationships fetches the dump relationships.
 func fetchDumpRelationships(
 	ctx context.Context,
 	client *infrahub.Client,
@@ -276,6 +291,7 @@ func fetchDumpRelationships(
 	return response.Relationship.Edges, err
 }
 
+// writeDumpRelationships writes the dump relationships.
 func writeDumpRelationships(path string, values []any) error {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -288,6 +304,7 @@ func writeDumpRelationships(path string, values []any) error {
 	return file.Close()
 }
 
+// manyRelationshipIdentifiers extracts peer identifiers from cardinality-many edges.
 func manyRelationshipIdentifiers(schema map[string]any, kinds []string) []string {
 	selected := make(map[string]struct{}, len(kinds))
 	for _, kind := range kinds {
@@ -307,6 +324,7 @@ func manyRelationshipIdentifiers(schema map[string]any, kinds []string) []string
 	return result
 }
 
+// schemaDefinitionKind returns the kind name declared by a schema definition.
 func schemaDefinitionKind(definition map[string]any) string {
 	if kind, _ := definition["kind"].(string); kind != "" {
 		return kind
@@ -316,6 +334,7 @@ func schemaDefinitionKind(definition map[string]any) string {
 	return namespace + name
 }
 
+// appendManyRelationshipIdentifiers appends the many relationship IDentifiers.
 func appendManyRelationshipIdentifiers(
 	result []string,
 	definition map[string]any,
@@ -338,6 +357,7 @@ func appendManyRelationshipIdentifiers(
 	return result
 }
 
+// eligibleManyRelationshipIdentifier filters peers that can be represented in a dump.
 func eligibleManyRelationshipIdentifier(relationship map[string]any, selected map[string]struct{}) (string, bool) {
 	cardinality, _ := relationship["cardinality"].(string)
 	optional, _ := relationship["optional"].(bool)
@@ -350,6 +370,7 @@ func eligibleManyRelationshipIdentifier(relationship map[string]any, selected ma
 	return identifier, selectedPeer
 }
 
+// schemaNodeKinds selects dumpable node kinds from the schema response.
 func schemaNodeKinds(schema map[string]any, namespaces, excludes []string) []string {
 	wantedNamespaces := make(map[string]struct{}, len(namespaces))
 	for _, namespace := range namespaces {
@@ -388,6 +409,7 @@ func schemaNodeKinds(schema map[string]any, namespaces, excludes []string) []str
 	return result
 }
 
+// dumpSelections builds query selections for one dumped kind.
 func dumpSelections(schema map[string]any, kind string) ([]node.Selection, error) {
 	definition, ok := findDumpSchemaDefinition(schema, kind)
 	if !ok {
@@ -399,6 +421,7 @@ func dumpSelections(schema map[string]any, kind string) ([]node.Selection, error
 	return selections, nil
 }
 
+// findDumpSchemaDefinition finds the dump schema definition.
 func findDumpSchemaDefinition(schema map[string]any, kind string) (map[string]any, bool) {
 	for _, section := range []string{"generics", "nodes"} {
 		items, _ := schema[section].([]any)
@@ -415,6 +438,7 @@ func findDumpSchemaDefinition(schema map[string]any, kind string) (map[string]an
 	return nil, false
 }
 
+// dumpAttributeSelections builds selections for schema-defined attributes.
 func dumpAttributeSelections(definition map[string]any) []node.Selection {
 	attributes, _ := definition["attributes"].([]any)
 	selections := make([]node.Selection, 0, len(attributes))
@@ -428,6 +452,7 @@ func dumpAttributeSelections(definition map[string]any) []node.Selection {
 	return selections
 }
 
+// dumpRelationshipSelections builds selections for schema-defined relationships.
 func dumpRelationshipSelections(definition map[string]any) []node.Selection {
 	relationships, _ := definition["relationships"].([]any)
 	selections := make([]node.Selection, 0, len(relationships))
@@ -441,6 +466,7 @@ func dumpRelationshipSelections(definition map[string]any) []node.Selection {
 	return selections
 }
 
+// dumpRelationshipSelection builds the nested selection for one relationship.
 func dumpRelationshipSelection(relationship map[string]any) (node.Selection, bool) {
 	name, _ := relationship["name"].(string)
 	if name == "" {
@@ -453,12 +479,14 @@ func dumpRelationshipSelection(relationship map[string]any) (node.Selection, boo
 	return node.Select(name, node.Select("node", node.Select("id"))), true
 }
 
+// loadOptions holds internal data used by the load options workflow.
 type loadOptions struct {
 	directory       string
 	branch          string
 	continueOnError bool
 }
 
+// pendingDumpNode holds internal data used by the pending dump node workflow.
 type pendingDumpNode struct {
 	record        dumpRecord
 	data          map[string]any
@@ -466,11 +494,13 @@ type pendingDumpNode struct {
 	hfid          []string
 }
 
+// dumpRelationshipPeer holds internal data used by the dump relationship peer workflow.
 type dumpRelationshipPeer struct {
 	ID   string `json:"id"`
 	Kind string `json:"kind"`
 }
 
+// dumpRelationshipEdge holds internal data used by the dump relationship edge workflow.
 type dumpRelationshipEdge struct {
 	Node struct {
 		Identifier string                 `json:"identifier"`
@@ -478,17 +508,20 @@ type dumpRelationshipEdge struct {
 	} `json:"node"`
 }
 
+// loadDumpData holds internal data used by the load dump data workflow.
 type loadDumpData struct {
 	nodes             []pendingDumpNode
 	relationshipEdges []dumpRelationshipEdge
 }
 
+// loadProgress holds internal data used by the load progress workflow.
 type loadProgress struct {
 	loaded int
 	failed int
 	idMap  map[string]string
 }
 
+// runLoad runs the load.
 func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	flags := flag.NewFlagSet("load", flag.ContinueOnError)
 	flags.SetOutput(r.Stderr)
@@ -506,6 +539,7 @@ func (r Runner) runLoad(ctx context.Context, client *infrahub.Client, branch str
 	})
 }
 
+// executeLoad executes the load.
 func (r Runner) executeLoad(ctx context.Context, client *infrahub.Client, options loadOptions) int {
 	dump, err := readLoadDump(options.directory)
 	if err != nil {
@@ -528,6 +562,7 @@ func (r Runner) executeLoad(ctx context.Context, client *infrahub.Client, option
 	return r.writeLoadResult(progress)
 }
 
+// readLoadDump reads the load dump.
 func readLoadDump(directory string) (loadDumpData, error) {
 	file, err := os.Open(filepath.Join(directory, "nodes.json"))
 	if err != nil {
@@ -549,6 +584,7 @@ func readLoadDump(directory string) (loadDumpData, error) {
 	return loadDumpData{nodes: nodes, relationshipEdges: relationshipEdges}, nil
 }
 
+// readPendingDumpNodes reads the pending dump nodes.
 func readPendingDumpNodes(input io.Reader) ([]pendingDumpNode, error) {
 	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, 64*1024), 16<<20)
@@ -566,6 +602,7 @@ func readPendingDumpNodes(input io.Reader) ([]pendingDumpNode, error) {
 	return pending, nil
 }
 
+// decodePendingDumpNode decodes the pending dump node.
 func decodePendingDumpNode(data []byte, line int) (pendingDumpNode, error) {
 	var record dumpRecord
 	if err := json.Unmarshal(data, &record); err != nil {
@@ -579,6 +616,7 @@ func decodePendingDumpNode(data []byte, line int) (pendingDumpNode, error) {
 	return pendingDumpNode{record: record, data: fields, relationships: relationships, hfid: hfid}, nil
 }
 
+// restoreDumpNodes restores the dump nodes.
 func restoreDumpNodes(
 	ctx context.Context,
 	service *node.Service,
@@ -604,6 +642,7 @@ func restoreDumpNodes(
 	return progress, nil
 }
 
+// restoreDumpNodeRelationships restores the dump node relationships.
 func restoreDumpNodeRelationships(
 	ctx context.Context,
 	service *node.Service,
@@ -631,6 +670,7 @@ func restoreDumpNodeRelationships(
 	return failed, nil
 }
 
+// restoreDumpRelationshipEdges restores the dump relationship edges.
 func restoreDumpRelationshipEdges(
 	ctx context.Context,
 	client *infrahub.Client,
@@ -669,6 +709,7 @@ func restoreDumpRelationshipEdges(
 	return failed, nil
 }
 
+// resolveDumpRelationship resolves the dump relationship.
 func resolveDumpRelationship(
 	edge dumpRelationshipEdge,
 	names map[string]string,
@@ -695,6 +736,7 @@ func resolveDumpRelationship(
 	return source, destination, name, nil
 }
 
+// writeLoadResult writes the load result.
 func (r Runner) writeLoadResult(progress loadProgress) int {
 	if code := r.writeJSON(map[string]int{"loaded": progress.loaded, "failed": progress.failed}); code != 0 {
 		return code
@@ -705,6 +747,7 @@ func (r Runner) writeLoadResult(progress loadProgress) int {
 	return 0
 }
 
+// dumpMutationData converts serialized GraphQL data into node mutation input.
 func dumpMutationData(data map[string]any) (map[string]any, map[string]any, []string) {
 	hfid := stringSlice(data["hfid"])
 	delete(data, "id")
@@ -731,6 +774,7 @@ func dumpMutationData(data map[string]any) (map[string]any, map[string]any, []st
 	return data, relationships, hfid
 }
 
+// stringSlice converts a dynamically decoded value to a string slice.
 func stringSlice(value any) []string {
 	raw, _ := value.([]any)
 	result := make([]string, 0, len(raw))
@@ -742,6 +786,7 @@ func stringSlice(value any) []string {
 	return result
 }
 
+// relatedNodeInputs normalizes relationship data into mutation inputs.
 func relatedNodeInputs(edges []any) []map[string]any {
 	result := make([]map[string]any, 0, len(edges))
 	for _, rawEdge := range edges {
@@ -753,6 +798,7 @@ func relatedNodeInputs(edges []any) []map[string]any {
 	return result
 }
 
+// relatedNodeInput normalizes one relationship peer into mutation input.
 func relatedNodeInput(value any) map[string]any {
 	related, _ := value.(map[string]any)
 	id, _ := related["id"].(string)
@@ -762,6 +808,7 @@ func relatedNodeInput(value any) map[string]any {
 	return map[string]any{"id": id}
 }
 
+// remapRelatedNodeIDs replaces source node identifiers with their restored identifiers.
 func remapRelatedNodeIDs(value any, ids map[string]string) any {
 	switch related := value.(type) {
 	case map[string]any:
@@ -785,6 +832,7 @@ func remapRelatedNodeIDs(value any, ids map[string]string) any {
 	}
 }
 
+// remapNodeID remaps the node ID.
 func remapNodeID(id string, ids map[string]string) string {
 	if replacement := ids[id]; replacement != "" {
 		return replacement
@@ -792,6 +840,7 @@ func remapNodeID(id string, ids map[string]string) string {
 	return id
 }
 
+// restoreDumpNode restores the dump node.
 func restoreDumpNode(
 	ctx context.Context,
 	service *node.Service,
@@ -825,6 +874,7 @@ func restoreDumpNode(
 	return service.Create(ctx, record.Kind, data, branch)
 }
 
+// relationshipNamesByKind indexes relationship names by schema kind.
 func relationshipNamesByKind(schema map[string]any) map[string]string {
 	result := map[string]string{}
 	items, _ := schema["nodes"].([]any)
@@ -849,6 +899,7 @@ func relationshipNamesByKind(schema map[string]any) map[string]string {
 	return result
 }
 
+// menuDocument holds internal data used by the menu document workflow.
 type menuDocument struct {
 	APIVersion string `json:"apiVersion" yaml:"apiVersion"`
 	Kind       string `json:"kind" yaml:"kind"`
@@ -858,6 +909,7 @@ type menuDocument struct {
 	} `json:"spec" yaml:"spec"`
 }
 
+// readMenu reads the menu.
 func readMenu(path string) (menuDocument, error) {
 	var result menuDocument
 	document, err := readMapFile(path)
@@ -888,6 +940,7 @@ func readMenu(path string) (menuDocument, error) {
 	return result, nil
 }
 
+// prepareMenuItem prepares the menu item.
 func prepareMenuItem(item map[string]any, index int) error {
 	if err := validateMenuItemRequiredFields(item); err != nil {
 		return err
@@ -896,6 +949,7 @@ func prepareMenuItem(item map[string]any, index int) error {
 	return prepareMenuItemChildren(item)
 }
 
+// validateMenuItemRequiredFields validates the menu item required fields.
 func validateMenuItemRequiredFields(item map[string]any) error {
 	for _, key := range []string{"namespace", "name", "label"} {
 		if value, ok := item[key].(string); !ok || strings.TrimSpace(value) == "" {
@@ -905,6 +959,7 @@ func validateMenuItemRequiredFields(item map[string]any) error {
 	return nil
 }
 
+// setMenuItemDefaults sets the menu item defaults.
 func setMenuItemDefaults(item map[string]any, index int) {
 	if _, ok := item["order_weight"]; !ok {
 		item["order_weight"] = (index + 1) * 1000
@@ -916,6 +971,7 @@ func setMenuItemDefaults(item map[string]any, index int) {
 	}
 }
 
+// prepareMenuItemChildren prepares the menu item children.
 func prepareMenuItemChildren(item map[string]any) error {
 	children, ok := item["children"].([]any)
 	if !ok {
@@ -933,6 +989,7 @@ func prepareMenuItemChildren(item map[string]any) error {
 	return nil
 }
 
+// runMenu runs the menu.
 func (r Runner) runMenu(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	if len(args) != 2 {
 		return r.usageError("usage: infrahubctl menu <load|validate> <file>")
@@ -955,6 +1012,7 @@ func (r Runner) runMenu(ctx context.Context, client *infrahub.Client, branch str
 	return r.writeJSON(map[string]int{"loaded": len(document.Spec.Data)})
 }
 
+// runTelemetry runs the telemetry.
 func (r Runner) runTelemetry(ctx context.Context, client *infrahub.Client, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl telemetry <list|export>")
@@ -1010,6 +1068,7 @@ func (r Runner) runTelemetry(ctx context.Context, client *infrahub.Client, args 
 	return 0
 }
 
+// runValidate runs the valIDate.
 func (r Runner) runValidate(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	if len(args) < 2 {
 		return r.usageError("usage: infrahubctl validate <schema|graphql-query> <file> [flags]")
@@ -1026,6 +1085,7 @@ func (r Runner) runValidate(ctx context.Context, client *infrahub.Client, branch
 	return exitCode
 }
 
+// runValidateSchema runs the valIDate schema.
 func (r Runner) runValidateSchema(paths []string) int {
 	documents, err := readSchemaDocuments(paths)
 	if err != nil {
@@ -1037,6 +1097,7 @@ func (r Runner) runValidateSchema(paths []string) int {
 	return r.writeJSON(map[string]any{"valid": true, "documents": len(documents)})
 }
 
+// validateSchemaDocuments validates the schema documents.
 func validateSchemaDocuments(documents []map[string]any) error {
 	for index, document := range documents {
 		if len(document) == 0 {
@@ -1051,6 +1112,7 @@ func validateSchemaDocuments(documents []map[string]any) error {
 	return nil
 }
 
+// graphqlValidationOptions holds internal data used by the graphql valIDation options workflow.
 type graphqlValidationOptions struct {
 	branch    string
 	out       string
@@ -1058,6 +1120,7 @@ type graphqlValidationOptions struct {
 	variables []string
 }
 
+// runValidateGraphQL runs the valIDate GraphQL.
 func (r Runner) runValidateGraphQL(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	flags := flag.NewFlagSet("validate graphql-query", flag.ContinueOnError)
 	flags.SetOutput(r.Stderr)
@@ -1075,6 +1138,7 @@ func (r Runner) runValidateGraphQL(ctx context.Context, client *infrahub.Client,
 	})
 }
 
+// executeGraphQLValidation executes the GraphQL valIDation.
 func (r Runner) executeGraphQLValidation(
 	ctx context.Context,
 	client *infrahub.Client,
@@ -1097,6 +1161,7 @@ func (r Runner) executeGraphQLValidation(
 	return r.writeGraphQLValidationResult(result, options.out)
 }
 
+// writeGraphQLValidationResult writes the GraphQL valIDation result.
 func (r Runner) writeGraphQLValidationResult(result any, out string) int {
 	if out == "" {
 		return r.writeJSON(result)
@@ -1107,6 +1172,7 @@ func (r Runner) writeGraphQLValidationResult(result any, out string) int {
 	return 0
 }
 
+// writeIndentedJSON writes the indented JSON.
 func writeIndentedJSON(path string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
@@ -1115,6 +1181,7 @@ func writeIndentedJSON(path string, value any) error {
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
+// runProtocols runs the protocols.
 func (r Runner) runProtocols(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	flags := flag.NewFlagSet("protocols", flag.ContinueOnError)
 	flags.SetOutput(r.Stderr)
@@ -1159,6 +1226,7 @@ func (r Runner) runProtocols(ctx context.Context, client *infrahub.Client, branc
 	return 0
 }
 
+// mergeSchemaDocuments merges the schema documents.
 func mergeSchemaDocuments(documents []map[string]any) map[string]any {
 	merged := map[string]any{"nodes": []any{}, "generics": []any{}}
 	for _, document := range documents {
@@ -1172,16 +1240,19 @@ func mergeSchemaDocuments(documents []map[string]any) map[string]any {
 	return merged
 }
 
+// protocolField holds internal data used by the protocol field workflow.
 type protocolField struct {
 	Name string
 	Type string
 }
 
+// protocolDefinition holds internal data used by the protocol definition workflow.
 type protocolDefinition struct {
 	Kind   string
 	Fields []protocolField
 }
 
+// generateProtocols generates the protocols.
 func generateProtocols(schema map[string]any, syncMode bool) (string, error) {
 	definitions := protocolDefinitions(schema)
 	if len(definitions) == 0 {
@@ -1191,6 +1262,7 @@ func generateProtocols(schema map[string]any, syncMode bool) (string, error) {
 	return renderProtocols(definitions, syncMode), nil
 }
 
+// protocolDefinitions converts schema kinds into protocol definitions.
 func protocolDefinitions(schema map[string]any) []protocolDefinition {
 	var definitions []protocolDefinition
 	for _, section := range []string{"generics", "nodes"} {
@@ -1204,6 +1276,7 @@ func protocolDefinitions(schema map[string]any) []protocolDefinition {
 	return definitions
 }
 
+// newProtocolDefinition creates the protocol definition.
 func newProtocolDefinition(raw any) (protocolDefinition, bool) {
 	item, ok := raw.(map[string]any)
 	if !ok {
@@ -1218,6 +1291,7 @@ func newProtocolDefinition(raw any) (protocolDefinition, bool) {
 	return protocolDefinition{Kind: kind, Fields: fields}, true
 }
 
+// protocolKind converts one schema kind into a protocol definition.
 func protocolKind(item map[string]any) string {
 	kind, _ := item["kind"].(string)
 	if kind != "" {
@@ -1228,6 +1302,7 @@ func protocolKind(item map[string]any) string {
 	return namespace + name
 }
 
+// protocolAttributeFields converts schema attributes into protocol fields.
 func protocolAttributeFields(item map[string]any) []protocolField {
 	attributes, _ := item["attributes"].([]any)
 	fields := make([]protocolField, 0, len(attributes))
@@ -1243,6 +1318,7 @@ func protocolAttributeFields(item map[string]any) []protocolField {
 	return fields
 }
 
+// protocolRelationshipFields converts schema relationships into protocol fields.
 func protocolRelationshipFields(item map[string]any) []protocolField {
 	relationships, _ := item["relationships"].([]any)
 	fields := make([]protocolField, 0, len(relationships))
@@ -1254,6 +1330,7 @@ func protocolRelationshipFields(item map[string]any) []protocolField {
 	return fields
 }
 
+// protocolRelationshipField converts one schema relationship into a protocol field.
 func protocolRelationshipField(raw any) (protocolField, bool) {
 	relationship, _ := raw.(map[string]any)
 	name, _ := relationship["name"].(string)
@@ -1271,6 +1348,7 @@ func protocolRelationshipField(raw any) (protocolField, bool) {
 	return protocolField{Name: name, Type: fieldType}, true
 }
 
+// renderProtocols renders the protocols.
 func renderProtocols(definitions []protocolDefinition, syncMode bool) string {
 	var output strings.Builder
 	output.WriteString("# Generated by infrahubctl protocols. DO NOT EDIT.\nfrom __future__ import annotations\nfrom datetime import datetime\nfrom typing import Any, Protocol, Sequence\n\n")
@@ -1287,6 +1365,7 @@ func renderProtocols(definitions []protocolDefinition, syncMode bool) string {
 	return output.String()
 }
 
+// protocolAttributeType maps an Infrahub attribute kind to a protocol field type.
 func protocolAttributeType(attribute map[string]any) string {
 	kind, _ := attribute["kind"].(string)
 	types := map[string]string{
@@ -1304,6 +1383,7 @@ func protocolAttributeType(attribute map[string]any) string {
 	return fieldType
 }
 
+// marketplaceOptions holds internal data used by the marketplace options workflow.
 type marketplaceOptions struct {
 	command    string
 	baseURL    string
@@ -1314,6 +1394,7 @@ type marketplaceOptions struct {
 	args       []string
 }
 
+// runMarketplace runs the marketplace.
 func (r Runner) runMarketplace(ctx context.Context, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl marketplace <list|search|show|get>")
@@ -1351,6 +1432,7 @@ func (r Runner) runMarketplace(ctx context.Context, args []string) int {
 	return 0
 }
 
+// marketplaceURL validates and constructs the marketplace request URL.
 func marketplaceURL(options marketplaceOptions) (string, error) {
 	parsed, err := url.Parse(options.baseURL)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
@@ -1365,6 +1447,7 @@ func marketplaceURL(options marketplaceOptions) (string, error) {
 	return parsed.String(), nil
 }
 
+// marketplaceEndpoint appends an escaped endpoint path to the marketplace base URL.
 func marketplaceEndpoint(options marketplaceOptions) (string, url.Values, error) {
 	path := "/api/v1/schemas"
 	if options.collection {
@@ -1399,6 +1482,7 @@ func marketplaceEndpoint(options marketplaceOptions) (string, url.Values, error)
 	return path, values, nil
 }
 
+// marketplaceSearchQuery builds marketplace search parameters from command options.
 func marketplaceSearchQuery(options marketplaceOptions) string {
 	if options.query == "" && len(options.args) == 1 {
 		return options.args[0]
@@ -1406,6 +1490,7 @@ func marketplaceSearchQuery(options marketplaceOptions) string {
 	return options.query
 }
 
+// marketplaceIdentifier selects the requested marketplace object identifier.
 func marketplaceIdentifier(options marketplaceOptions) (string, error) {
 	if len(options.args) != 1 {
 		return "", fmt.Errorf("marketplace %s requires namespace/name", options.command)
@@ -1417,6 +1502,7 @@ func marketplaceIdentifier(options marketplaceOptions) (string, error) {
 	return "/" + url.PathEscape(parts[0]) + "/" + url.PathEscape(parts[1]), nil
 }
 
+// fetchMarketplace fetches the marketplace.
 func fetchMarketplace(ctx context.Context, requestURL string) ([]byte, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
@@ -1443,6 +1529,7 @@ func fetchMarketplace(ctx context.Context, requestURL string) ([]byte, error) {
 	return body, nil
 }
 
+// writeMarketplaceResponse writes the marketplace response.
 func (r Runner) writeMarketplaceResponse(options marketplaceOptions, body []byte) error {
 	if options.command == "get" && options.out != "" {
 		return os.WriteFile(options.out, body, 0o600)

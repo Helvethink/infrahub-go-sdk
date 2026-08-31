@@ -16,44 +16,70 @@ const defaultPageSize = 50
 type State string
 
 const (
-	StateScheduled  State = "SCHEDULED"
-	StatePending    State = "PENDING"
-	StateRunning    State = "RUNNING"
-	StateCompleted  State = "COMPLETED"
-	StateFailed     State = "FAILED"
-	StateCancelled  State = "CANCELLED"
-	StateCrashed    State = "CRASHED"
-	StatePaused     State = "PAUSED"
+	// StateScheduled identifies a task waiting for its scheduled start.
+	StateScheduled State = "SCHEDULED"
+	// StatePending identifies a task waiting to run.
+	StatePending State = "PENDING"
+	// StateRunning identifies a task currently executing.
+	StateRunning State = "RUNNING"
+	// StateCompleted identifies a successfully completed task.
+	StateCompleted State = "COMPLETED"
+	// StateFailed identifies a task that completed with a failure.
+	StateFailed State = "FAILED"
+	// StateCancelled identifies a cancelled task.
+	StateCancelled State = "CANCELLED"
+	// StateCrashed identifies a task that terminated unexpectedly.
+	StateCrashed State = "CRASHED"
+	// StatePaused identifies a paused task.
+	StatePaused State = "PAUSED"
+	// StateCancelling identifies a task whose cancellation is in progress.
 	StateCancelling State = "CANCELLING"
 )
 
 // Log is one message emitted by a task.
 type Log struct {
-	Message   string    `json:"message"`
-	Severity  string    `json:"severity"`
+	// Message contains the human-readable message.
+	Message string `json:"message"`
+	// Severity classifies the log entry.
+	Severity string `json:"severity"`
+	// Timestamp records when the message was emitted.
 	Timestamp time.Time `json:"timestamp"`
 }
 
 // RelatedNode identifies an Infrahub node related to a task.
 type RelatedNode struct {
-	ID   string `json:"id"`
+	// ID is the stable Infrahub identifier.
+	ID string `json:"id"`
+	// Kind is the Infrahub schema kind.
 	Kind string `json:"kind"`
 }
 
 // Task is an Infrahub background task.
 type Task struct {
-	ID           string         `json:"id"`
-	Title        string         `json:"title"`
-	State        State          `json:"state"`
-	Progress     *float64       `json:"progress"`
-	Workflow     *string        `json:"workflow"`
-	Branch       *string        `json:"branch"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	Parameters   map[string]any `json:"parameters"`
-	Tags         []string       `json:"tags"`
-	RelatedNodes []RelatedNode  `json:"related_nodes"`
-	Logs         []Log          `json:"-"`
+	// ID is the stable Infrahub identifier.
+	ID string `json:"id"`
+	// Title contains the title value.
+	Title string `json:"title"`
+	// State contains the state value.
+	State State `json:"state"`
+	// Progress is the optional completion ratio reported by the task.
+	Progress *float64 `json:"progress"`
+	// Workflow names the workflow that created the task, when available.
+	Workflow *string `json:"workflow"`
+	// Branch selects or identifies the Infrahub branch.
+	Branch *string `json:"branch"`
+	// CreatedAt is the task creation time.
+	CreatedAt time.Time `json:"created_at"`
+	// UpdatedAt is the task's most recent update time.
+	UpdatedAt time.Time `json:"updated_at"`
+	// Parameters contains the parameters value.
+	Parameters map[string]any `json:"parameters"`
+	// Tags contains the tags value.
+	Tags []string `json:"tags"`
+	// RelatedNodes contains the related nodes value.
+	RelatedNodes []RelatedNode `json:"related_nodes"`
+	// Logs contains the logs value.
+	Logs []Log `json:"-"`
 }
 
 // IsFinal reports whether the task has reached a terminal state.
@@ -68,33 +94,49 @@ func (t Task) IsFinal() bool {
 
 // Filter selects tasks using stable InfrahubTask query arguments.
 type Filter struct {
-	IDs            []string
-	Query          string
-	Branch         string
-	States         []State
-	Workflows      []string
+	// IDs selects tasks by identifier.
+	IDs []string
+	// Query contains the GraphQL query or query selection.
+	Query string
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// States contains the states value.
+	States []State
+	// Workflows contains the workflows value.
+	Workflows []string
+	// RelatedNodeIDs selects tasks related to any listed node identifier.
 	RelatedNodeIDs []string
 }
 
 // ListOptions configures a page of tasks.
 type ListOptions struct {
-	Filter              Filter
-	Offset              int
-	Limit               int
-	IncludeLogs         bool
+	// Filter contains the filter value.
+	Filter Filter
+	// Offset is the zero-based pagination offset.
+	Offset int
+	// Limit is the requested page size.
+	Limit int
+	// IncludeLogs requests log entries with each task.
+	IncludeLogs bool
+	// IncludeRelatedNodes requests related-node identities with each task.
 	IncludeRelatedNodes bool
 }
 
 // Page is one offset-based page of tasks.
 type Page struct {
-	Count  int
+	// Count is the total number of matching items.
+	Count int
+	// Offset is the zero-based pagination offset.
 	Offset int
-	Limit  int
-	Tasks  []Task
+	// Limit is the requested page size.
+	Limit int
+	// Tasks contains the tasks in this page.
+	Tasks []Task
 }
 
 // Executor is the minimal GraphQL behavior required by Service.
 type Executor interface {
+	// Execute runs a GraphQL operation and decodes its data.
 	Execute(context.Context, api.GraphQLRequest, any) error
 }
 
@@ -104,6 +146,7 @@ type Service struct{ client Executor }
 // NewService creates a task service backed by client.
 func NewService(client Executor) *Service { return &Service{client: client} }
 
+// taskNode holds internal data used by the task node workflow.
 type taskNode struct {
 	Task
 	Logs struct {
@@ -204,10 +247,13 @@ func (s *Service) Get(ctx context.Context, id string, includeLogs, includeRelate
 
 // AmbiguousError reports multiple tasks returned for one ID.
 type AmbiguousError struct {
-	ID    string
+	// ID is the stable Infrahub identifier.
+	ID string
+	// Count is the total number of matching items.
 	Count int
 }
 
+// Error reports that a task lookup matched more than one task.
 func (e *AmbiguousError) Error() string {
 	return fmt.Sprintf("infrahub: expected one task %q, received %d", e.ID, e.Count)
 }
@@ -241,6 +287,7 @@ func (s *Service) Wait(ctx context.Context, id string, interval time.Duration) (
 	}
 }
 
+// buildQuery builds the query.
 func buildQuery(options ListOptions, includeEdges bool, limit int) (string, map[string]any) {
 	definitions := []string{"$ids: [String!]", "$q: String", "$branch: String", "$state: [StateType!]", "$workflow: [String!]", "$relatedNodeIDs: [String!]"}
 	arguments := []string{"ids: $ids", "q: $q", "branch: $branch", "state: $state", "workflow: $workflow", "related_node__ids: $relatedNodeIDs"}
@@ -270,6 +317,7 @@ func buildQuery(options ListOptions, includeEdges bool, limit int) (string, map[
 	return query, variables
 }
 
+// nullableString converts an empty string to a GraphQL null value.
 func nullableString(value string) any {
 	if value == "" {
 		return nil

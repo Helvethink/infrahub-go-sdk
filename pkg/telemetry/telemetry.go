@@ -16,7 +16,9 @@ const exportPageSize = 1000
 
 // Client is the minimal REST behavior required by Service.
 type Client interface {
+	// Endpoint resolves an Infrahub REST endpoint against the configured base URL.
 	Endpoint(string, url.Values) *url.URL
+	// Do executes a bounded HTTP request.
 	Do(context.Context, string, *url.URL, io.Reader, http.Header, string) ([]byte, error)
 }
 
@@ -32,16 +34,22 @@ type Snapshot map[string]any
 
 // ListOptions filters and paginates telemetry snapshots.
 type ListOptions struct {
+	// StartDate sets the inclusive start of the telemetry range.
 	StartDate time.Time
-	EndDate   time.Time
-	Offset    int
-	Limit     int
+	// EndDate sets the inclusive end of the telemetry range.
+	EndDate time.Time
+	// Offset is the zero-based pagination offset.
+	Offset int
+	// Limit is the requested page size.
+	Limit int
 }
 
 // Page contains one page of telemetry snapshots.
 type Page struct {
+	// Snapshots contains the telemetry snapshots in this page.
 	Snapshots []Snapshot `json:"snapshots"`
-	Count     int        `json:"count"`
+	// Count is the total number of matching items.
+	Count int `json:"count"`
 }
 
 // List retrieves one page of telemetry snapshots.
