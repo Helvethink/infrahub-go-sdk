@@ -6,7 +6,7 @@
 version: "2"
 
 run:
-  go: "1.26"
+  go: "1.27"
   build-tags:
     - integration # [!] If you disable code for integration tests to run all unit tests, enable it to lint all the same.
   modules-download-mode: readonly
