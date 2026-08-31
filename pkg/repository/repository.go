@@ -21,6 +21,7 @@ var kindPattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
 
 // Executor is the minimal GraphQL behavior required by Service.
 type Executor interface {
+	// Execute runs a GraphQL operation and decodes its data.
 	Execute(context.Context, api.GraphQLRequest, any) error
 }
 
@@ -32,17 +33,25 @@ func NewService(client Executor) *Service { return &Service{client: client} }
 
 // BranchState describes a repository on one Infrahub branch.
 type BranchState struct {
-	Commit         string
+	// Commit contains the commit value.
+	Commit string
+	// InternalStatus contains the internal status value.
 	InternalStatus string
 }
 
 // Repository is a Git repository aggregated across Infrahub branches.
 type Repository struct {
-	ID       string
-	Kind     string
-	Name     string
+	// ID is the stable Infrahub identifier.
+	ID string
+	// Kind is the Infrahub schema kind.
+	Kind string
+	// Name is the human-readable name.
+	Name string
+	// Location contains the location value.
 	Location string
-	Ref      string
+	// Ref contains the ref value.
+	Ref string
+	// Branches contains the branches value.
 	Branches map[string]BranchState
 }
 
@@ -73,16 +82,22 @@ type ListOptions struct {
 
 // UpdateCommitOptions configures a repository commit update.
 type UpdateCommitOptions struct {
-	Branch       string
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// RepositoryID contains the repository ID value.
 	RepositoryID string
-	Commit       string
-	ReadOnly     bool
+	// Commit contains the commit value.
+	Commit string
+	// ReadOnly contains the read only value.
+	ReadOnly bool
 }
 
+// attribute holds internal data used by the attribute workflow.
 type attribute struct {
 	Value string `json:"value"`
 }
 
+// branchRepository holds internal data used by the branch repository workflow.
 type branchRepository struct {
 	ID             string    `json:"id"`
 	Kind           string    `json:"kind"`
@@ -138,6 +153,7 @@ func (s *Service) List(ctx context.Context, options ListOptions) ([]Repository, 
 	return aggregate(branches, byBranch), nil
 }
 
+// listBranches discovers the branches used for repository aggregation.
 func (s *Service) listBranches(ctx context.Context, kind string, branches []string, concurrency int) (map[string][]branchRepository, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -186,12 +202,14 @@ func (s *Service) listBranches(ctx context.Context, kind string, branches []stri
 	return byBranch, firstErr
 }
 
+// branchResult holds internal data used by the branch result workflow.
 type branchResult struct {
 	branch       string
 	repositories []branchRepository
 	err          error
 }
 
+// listBranch retrieves repository state for one branch.
 func (s *Service) listBranch(ctx context.Context, kind, branch string) ([]branchRepository, error) {
 	operation := "List" + kind
 	fields := `id kind: __typename name { value } location { value } internal_status { value }`
@@ -228,6 +246,7 @@ func (s *Service) listBranch(ctx context.Context, kind, branch string) ([]branch
 	}
 }
 
+// aggregate merges per-branch repository rows by stable repository identity.
 func aggregate(branches []string, byBranch map[string][]branchRepository) []Repository {
 	byName := make(map[string]*Repository)
 	for _, branch := range branches {
@@ -253,6 +272,7 @@ func aggregate(branches []string, byBranch map[string][]branchRepository) []Repo
 	return result
 }
 
+// uniqueSorted returns sorted values with duplicates removed.
 func uniqueSorted(values []string) []string {
 	sort.Strings(values)
 	result := values[:0]

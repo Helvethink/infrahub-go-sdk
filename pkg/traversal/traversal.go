@@ -20,93 +20,143 @@ const (
 
 // Node is the stable identity of a node encountered during traversal.
 type Node struct {
-	ID           string   `json:"id"`
-	Kind         string   `json:"kind"`
-	Label        string   `json:"label"`
-	DisplayLabel string   `json:"display_label"`
-	HFID         []string `json:"hfid"`
+	// ID is the stable Infrahub identifier.
+	ID string `json:"id"`
+	// Kind is the Infrahub schema kind.
+	Kind string `json:"kind"`
+	// Label contains the label value.
+	Label string `json:"label"`
+	// DisplayLabel is the human-readable display label.
+	DisplayLabel string `json:"display_label"`
+	// HFID contains the object's human-friendly identifier components.
+	HFID []string `json:"hfid"`
 }
 
 // Relationship is an edge traversed between two nodes.
 type Relationship struct {
+	// FromRelationship contains the from relationship value.
 	FromRelationship string `json:"from_rel"`
-	FromLabel        string `json:"from_label"`
-	ToRelationship   string `json:"to_rel"`
-	ToLabel          string `json:"to_label"`
-	Kind             string `json:"kind"`
+	// FromLabel contains the from label value.
+	FromLabel string `json:"from_label"`
+	// ToRelationship contains the to relationship value.
+	ToRelationship string `json:"to_rel"`
+	// ToLabel contains the to label value.
+	ToLabel string `json:"to_label"`
+	// Kind is the Infrahub schema kind.
+	Kind string `json:"kind"`
 }
 
 // Hop is one visited node and the edge used to reach it. Relationship is nil for the source hop.
 type Hop struct {
-	Node         Node          `json:"node"`
+	// Node contains the node value.
+	Node Node `json:"node"`
+	// Relationship contains the relationship value.
 	Relationship *Relationship `json:"relationship"`
 }
 
 // Path is one ordered route through the graph.
 type Path struct {
-	Hops  []Hop `json:"hops"`
-	Depth int   `json:"depth"`
+	// Hops contains the hops value.
+	Hops []Hop `json:"hops"`
+	// Depth contains the depth value.
+	Depth int `json:"depth"`
 }
 
 // PathsResult contains routes between a source and destination.
 type PathsResult struct {
-	Paths            []Path   `json:"paths"`
-	Source           Node     `json:"source"`
-	Destination      Node     `json:"destination"`
-	Count            int      `json:"count"`
-	ExcludedKinds    []string `json:"excluded_kinds"`
-	TruncatedAtDepth *int     `json:"truncated_at_depth"`
+	// Paths contains the paths value.
+	Paths []Path `json:"paths"`
+	// Source contains the source value.
+	Source Node `json:"source"`
+	// Destination contains the destination value.
+	Destination Node `json:"destination"`
+	// Count is the total number of matching items.
+	Count int `json:"count"`
+	// ExcludedKinds contains the excluded kinds value.
+	ExcludedKinds []string `json:"excluded_kinds"`
+	// TruncatedAtDepth contains the truncated at depth value.
+	TruncatedAtDepth *int `json:"truncated_at_depth"`
 }
 
 // PathsOptions configures traversal between two nodes.
 type PathsOptions struct {
-	SourceID           string
-	DestinationID      string
-	MaxDepth           *int
-	MaxPaths           *int
-	KindFilter         []string
+	// SourceID identifies the traversal source node.
+	SourceID string
+	// DestinationID identifies the traversal destination node.
+	DestinationID string
+	// MaxDepth limits traversal depth.
+	MaxDepth *int
+	// MaxPaths limits the number of returned paths.
+	MaxPaths *int
+	// KindFilter contains the kind filter value.
+	KindFilter []string
+	// RelationshipFilter contains the relationship filter value.
 	RelationshipFilter []string
+	// ExcludedNamespaces contains the excluded namespaces value.
 	ExcludedNamespaces []string
-	ExcludedKinds      []string
-	IncludedKinds      []string
-	ShortestPathsOnly  *bool
-	Branch             string
-	At                 time.Time
+	// ExcludedKinds contains the excluded kinds value.
+	ExcludedKinds []string
+	// IncludedKinds contains the included kinds value.
+	IncludedKinds []string
+	// ShortestPathsOnly contains the shortest paths only value.
+	ShortestPathsOnly *bool
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// At selects an optional point in time.
+	At time.Time
 }
 
 // ReachableNode is one reachable terminal and its path from the source.
 type ReachableNode struct {
-	Node  Node `json:"node"`
-	Depth int  `json:"depth"`
-	Path  Path `json:"path"`
+	// Node contains the node value.
+	Node Node `json:"node"`
+	// Depth contains the depth value.
+	Depth int `json:"depth"`
+	// Path identifies the GraphQL response path.
+	Path Path `json:"path"`
 }
 
 // ReachableResult contains nodes of requested kinds reachable from a source.
 type ReachableResult struct {
-	Source       Node            `json:"source"`
+	// Source contains the source value.
+	Source Node `json:"source"`
+	// Dependencies contains the dependencies value.
 	Dependencies []ReachableNode `json:"dependencies"`
-	Count        int             `json:"count"`
+	// Count is the total number of matching items.
+	Count int `json:"count"`
 }
 
 // ReachableOptions configures a reachable-node search.
 type ReachableOptions struct {
-	SourceID          string
-	TargetKinds       []string
-	MaxDepth          *int
-	MaxResults        *int
-	MaxPaths          *int
+	// SourceID identifies the traversal source node.
+	SourceID string
+	// TargetKinds selects the kinds to find.
+	TargetKinds []string
+	// MaxDepth limits traversal depth.
+	MaxDepth *int
+	// MaxResults limits the number of returned nodes.
+	MaxResults *int
+	// MaxPaths limits the number of returned paths.
+	MaxPaths *int
+	// ShortestPathsOnly contains the shortest paths only value.
 	ShortestPathsOnly *bool
-	Branch            string
-	At                time.Time
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// At selects an optional point in time.
+	At time.Time
 }
 
 // UnsupportedError reports a server version without graph traversal fields.
 type UnsupportedError struct {
-	Operation      string
+	// Operation contains the operation value.
+	Operation string
+	// MinimumVersion is the earliest Infrahub version supporting the operation.
 	MinimumVersion string
-	Err            error
+	// Err is the underlying error.
+	Err error
 }
 
+// Error reports the minimum Infrahub version required by the operation.
 func (e *UnsupportedError) Error() string {
 	return fmt.Sprintf("infrahub: %s requires Infrahub %s or later", e.Operation, e.MinimumVersion)
 }
@@ -116,6 +166,7 @@ func (e *UnsupportedError) Unwrap() error { return e.Err }
 
 // Executor is the minimal GraphQL behavior required by Service.
 type Executor interface {
+	// Execute runs a GraphQL operation and decodes its data.
 	Execute(context.Context, api.GraphQLRequest, any) error
 }
 
@@ -203,6 +254,7 @@ func (s *Service) Reachable(ctx context.Context, options ReachableOptions) (*Rea
 	return &response.Result, err
 }
 
+// validateRange validates the range.
 func validateRange(name string, value *int, maximum int) error {
 	if value != nil && (*value < 1 || *value > maximum) {
 		return fmt.Errorf("infrahub: traversal %s must be between 1 and %d", name, maximum)
@@ -210,6 +262,7 @@ func validateRange(name string, value *int, maximum int) error {
 	return nil
 }
 
+// setOptional sets the optional.
 func setOptional(input map[string]any, name string, value any) {
 	switch typed := value.(type) {
 	case *int:
@@ -227,6 +280,7 @@ func setOptional(input map[string]any, name string, value any) {
 	}
 }
 
+// unsupported recognizes GraphQL validation failures for unavailable traversal fields.
 func unsupported(err error, field string) bool {
 	var graphqlError *api.GraphQLError
 	if !errors.As(err, &graphqlError) {
@@ -247,6 +301,7 @@ func unsupported(err error, field string) bool {
 	return false
 }
 
+// recordPaths records the paths.
 func recordPaths(ctx context.Context, result *PathsResult) {
 	ids := []string{result.Source.ID, result.Destination.ID}
 	for _, path := range result.Paths {
@@ -257,6 +312,7 @@ func recordPaths(ctx context.Context, result *PathsResult) {
 	requestcontext.RecordNodeIDs(ctx, ids...)
 }
 
+// recordReachable records the reachable.
 func recordReachable(ctx context.Context, result *ReachableResult) {
 	ids := []string{result.Source.ID}
 	for _, dependency := range result.Dependencies {

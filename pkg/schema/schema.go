@@ -13,8 +13,11 @@ import (
 
 // Client is the minimal protocol required by Service.
 type Client interface {
+	// DefaultBranch is used when a request does not select a branch.
 	DefaultBranch() string
+	// Endpoint resolves an Infrahub REST endpoint against the configured base URL.
 	Endpoint(string, url.Values) *url.URL
+	// Do executes a bounded HTTP request.
 	Do(context.Context, string, *url.URL, io.Reader, http.Header, string) ([]byte, error)
 }
 
@@ -65,6 +68,7 @@ func (s *Service) Check(ctx context.Context, branch string, schemas []map[string
 	return s.post(ctx, "api/schema/check", branch, schemas, dst)
 }
 
+// post sends schema documents to a schema endpoint and decodes its response.
 func (s *Service) post(ctx context.Context, path, branch string, schemas []map[string]any, dst any) error {
 	if branch == "" {
 		branch = s.client.DefaultBranch()
@@ -83,6 +87,7 @@ func (s *Service) post(ctx context.Context, path, branch string, schemas []map[s
 	return nil
 }
 
+// decode unmarshals a bounded response when a destination was supplied.
 func decode(data []byte, dst any) error {
 	if dst == nil {
 		return nil

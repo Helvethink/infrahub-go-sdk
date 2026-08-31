@@ -16,7 +16,9 @@ import (
 // Selection describes one field in a dynamic GraphQL selection set. Fields
 // contains nested selections for attributes, relationships, or other objects.
 type Selection struct {
-	Name   string
+	// Name is the human-readable name.
+	Name string
+	// Fields contains dynamically selected schema-defined fields.
 	Fields []Selection
 }
 
@@ -31,17 +33,25 @@ func Select(name string, fields ...Selection) Selection {
 // supported Go scalar and slice values. Set Type for custom scalars such as
 // BigInt, DateTime, or nested list types.
 type Filter struct {
-	Name  string
+	// Name is the human-readable name.
+	Name string
+	// Value contains the successful result value.
 	Value any
-	Type  string
+	// Type contains the type value.
+	Type string
 }
 
 // QueryOptions configures a dynamic node query.
 type QueryOptions struct {
-	Branch     string
-	Offset     int
-	Limit      int
-	Filters    []Filter
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// Offset is the zero-based pagination offset.
+	Offset int
+	// Limit is the requested page size.
+	Limit int
+	// Filters contains the filters value.
+	Filters []Filter
+	// Selections contains the selections value.
 	Selections []Selection
 }
 
@@ -65,6 +75,7 @@ func (s *Service) Query(ctx context.Context, kind string, options QueryOptions) 
 	return page, err
 }
 
+// buildQuery builds the query.
 func buildQuery(kind string, options QueryOptions) (api.GraphQLRequest, error) {
 	if err := validateKind(kind); err != nil {
 		return api.GraphQLRequest{}, err
@@ -112,6 +123,7 @@ func buildQuery(kind string, options QueryOptions) (api.GraphQLRequest, error) {
 	}, nil
 }
 
+// renderSelections renders the selections.
 func renderSelections(selections []Selection) (string, error) {
 	result := []string{"id", "kind: __typename", "hfid", "display_label"}
 	identity := map[string]struct{}{"id": {}, "kind": {}, "hfid": {}, "display_label": {}}
@@ -133,6 +145,7 @@ func renderSelections(selections []Selection) (string, error) {
 	return strings.Join(result, " "), nil
 }
 
+// renderSelection renders the selection.
 func renderSelection(selection Selection) (string, error) {
 	if !isGraphQLName(selection.Name) {
 		return "", fmt.Errorf("infrahub: invalid selection name %q", selection.Name)
@@ -156,6 +169,7 @@ func renderSelection(selection Selection) (string, error) {
 	return selection.Name + " { " + strings.Join(nested, " ") + " }", nil
 }
 
+// inferGraphQLType infers the GraphQL type.
 func inferGraphQLType(value any) (string, error) {
 	switch typed := value.(type) {
 	case string:
@@ -202,6 +216,7 @@ func inferGraphQLType(value any) (string, error) {
 	}
 }
 
+// integerType selects the GraphQL integer type for value.
 func integerType(value int64) (string, error) {
 	if value < math.MinInt32 || value > math.MaxInt32 {
 		return "", fmt.Errorf("integer %d exceeds GraphQL Int range; set Filter.Type to an Infrahub scalar such as BigInt", value)
@@ -209,6 +224,7 @@ func integerType(value int64) (string, error) {
 	return "Int!", nil
 }
 
+// isGraphQLName reports whether value is a valid GraphQL name.
 func isGraphQLName(value string) bool {
 	if value == "" || value[0] != '_' && !isASCIIAlpha(value[0]) {
 		return false
@@ -221,15 +237,18 @@ func isGraphQLName(value string) bool {
 	return true
 }
 
+// isASCIIAlpha reports whether value is an ASCII letter.
 func isASCIIAlpha(value byte) bool {
 	return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z'
 }
 
+// isGraphQLType reports whether value is a valid GraphQL type expression.
 func isGraphQLType(value string) bool {
 	position, ok := parseGraphQLType(value, 0)
 	return ok && position == len(value)
 }
 
+// parseGraphQLType parses the GraphQL type.
 func parseGraphQLType(value string, position int) (int, bool) {
 	if position >= len(value) {
 		return position, false

@@ -29,7 +29,9 @@ var allowedTextMediaTypes = map[string]struct{}{
 
 // Client is the minimal REST behavior required by Service.
 type Client interface {
+	// EndpointSegments resolves individually escaped REST path segments.
 	EndpointSegments([]string, url.Values) *url.URL
+	// DoResponse executes a bounded HTTP request and preserves response metadata.
 	DoResponse(context.Context, string, *url.URL, io.Reader, http.Header, string) (*api.HTTPResponse, error)
 }
 
@@ -41,17 +43,22 @@ func NewService(client Client) *Service { return &Service{client: client} }
 
 // UploadResult identifies content stored by Infrahub.
 type UploadResult struct {
+	// Identifier is the object or resource identifier.
 	Identifier string `json:"identifier"`
-	Checksum   string `json:"checksum"`
+	// Checksum contains the checksum value.
+	Checksum string `json:"checksum"`
 }
 
 // UnsupportedContentTypeError reports binary content returned by a text-only
 // file method.
 type UnsupportedContentTypeError struct {
-	Identifier  string
+	// Identifier is the object or resource identifier.
+	Identifier string
+	// ContentType contains the content type value.
 	ContentType string
 }
 
+// Error reports the unsupported response content type.
 func (e *UnsupportedContentTypeError) Error() string {
 	return fmt.Sprintf("infrahub: binary content type %q is not supported for file %q", e.ContentType, e.Identifier)
 }
@@ -120,6 +127,7 @@ func (s *Service) GetFileByHFID(ctx context.Context, kind string, hfid []string)
 	return s.getTextFile(ctx, []string{"api", "storage", "files", "by-hfid", kind}, query, kind+":"+strings.Join(hfid, "/"))
 }
 
+// getTextFile gets the text file.
 func (s *Service) getTextFile(ctx context.Context, segments []string, query url.Values, identifier string) (string, error) {
 	response, err := s.get(ctx, segments, query, trackerGetFile)
 	if err != nil {
@@ -138,6 +146,7 @@ func (s *Service) getTextFile(ctx context.Context, segments []string, query url.
 	return string(response.Body), nil
 }
 
+// get retrieves stored text and rejects unsupported response content types.
 func (s *Service) get(ctx context.Context, segments []string, query url.Values, tracker string) (*api.HTTPResponse, error) {
 	return s.client.DoResponse(ctx, http.MethodGet, s.client.EndpointSegments(segments, query), nil, nil, tracker)
 }

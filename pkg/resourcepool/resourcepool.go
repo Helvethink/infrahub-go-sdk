@@ -13,6 +13,7 @@ const defaultPageSize = 50
 
 // Executor is the minimal GraphQL behavior required by Service.
 type Executor interface {
+	// Execute runs a GraphQL operation and decodes its data.
 	Execute(context.Context, api.GraphQLRequest, any) error
 }
 
@@ -24,77 +25,118 @@ func NewService(client Executor) *Service { return &Service{client: client} }
 
 // Allocation identifies a resource allocated by a pool.
 type Allocation struct {
-	ID           string  `json:"id"`
-	Kind         string  `json:"kind"`
-	Identifier   *string `json:"identifier"`
-	DisplayLabel string  `json:"display_label"`
-	Branch       string  `json:"branch,omitempty"`
+	// ID is the stable Infrahub identifier.
+	ID string `json:"id"`
+	// Kind is the Infrahub schema kind.
+	Kind string `json:"kind"`
+	// Identifier is the object or resource identifier.
+	Identifier *string `json:"identifier"`
+	// DisplayLabel is the human-readable display label.
+	DisplayLabel string `json:"display_label"`
+	// Branch selects or identifies the Infrahub branch.
+	Branch string `json:"branch,omitempty"`
 }
 
 // AddressOptions configures allocation from a CoreIPAddressPool.
 type AddressOptions struct {
-	PoolID       string
-	Identifier   string
+	// PoolID contains the pool ID value.
+	PoolID string
+	// Identifier is the object or resource identifier.
+	Identifier string
+	// PrefixLength contains the prefix length value.
 	PrefixLength *int
-	AddressKind  string
-	Data         map[string]any
-	Branch       string
+	// AddressKind contains the address kind value.
+	AddressKind string
+	// Data contains the data value.
+	Data map[string]any
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
 }
 
 // MemberType describes the members accepted by an allocated prefix.
 type MemberType string
 
 const (
-	MemberTypePrefix  MemberType = "prefix"
+	// MemberTypePrefix requests allocation of a child prefix.
+	MemberTypePrefix MemberType = "prefix"
+	// MemberTypeAddress requests allocation of an address.
 	MemberTypeAddress MemberType = "address"
 )
 
 // PrefixOptions configures allocation from a CoreIPPrefixPool.
 type PrefixOptions struct {
-	PoolID       string
-	Identifier   string
+	// PoolID contains the pool ID value.
+	PoolID string
+	// Identifier is the object or resource identifier.
+	Identifier string
+	// PrefixLength contains the prefix length value.
 	PrefixLength *int
-	MemberType   MemberType
-	PrefixKind   string
-	Data         map[string]any
-	Branch       string
+	// MemberType contains the member type value.
+	MemberType MemberType
+	// PrefixKind contains the prefix kind value.
+	PrefixKind string
+	// Data contains the data value.
+	Data map[string]any
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
 }
 
 // AllocatedOptions configures one page of allocation records.
 type AllocatedOptions struct {
-	PoolID     string
+	// PoolID contains the pool ID value.
+	PoolID string
+	// ResourceID contains the resource ID value.
 	ResourceID string
-	Branch     string
-	Offset     int
-	Limit      int
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// Offset is the zero-based pagination offset.
+	Offset int
+	// Limit is the requested page size.
+	Limit int
 }
 
 // AllocationPage is one offset-based page of allocation records.
 type AllocationPage struct {
-	Count       int64
-	Offset      int
-	Limit       int
+	// Count is the total number of matching items.
+	Count int64
+	// Offset is the zero-based pagination offset.
+	Offset int
+	// Limit is the requested page size.
+	Limit int
+	// Allocations contains the allocations value.
 	Allocations []Allocation
 }
 
 // Utilization describes usage of one resource backing a pool.
 type Utilization struct {
-	ID                       string  `json:"id"`
-	Kind                     string  `json:"kind"`
-	DisplayLabel             string  `json:"display_label"`
-	Utilization              float64 `json:"utilization"`
-	UtilizationBranches      float64 `json:"utilization_branches"`
+	// ID is the stable Infrahub identifier.
+	ID string `json:"id"`
+	// Kind is the Infrahub schema kind.
+	Kind string `json:"kind"`
+	// DisplayLabel is the human-readable display label.
+	DisplayLabel string `json:"display_label"`
+	// Utilization contains the utilization value.
+	Utilization float64 `json:"utilization"`
+	// UtilizationBranches contains the utilization branches value.
+	UtilizationBranches float64 `json:"utilization_branches"`
+	// UtilizationDefaultBranch contains the utilization default branch value.
 	UtilizationDefaultBranch float64 `json:"utilization_default_branch"`
-	Weight                   int64   `json:"weight"`
+	// Weight contains the weight value.
+	Weight int64 `json:"weight"`
 }
 
 // UtilizationResult describes a pool and each backing resource's utilization.
 type UtilizationResult struct {
-	Count                    int64
-	Utilization              float64
-	UtilizationBranches      float64
+	// Count is the total number of matching items.
+	Count int64
+	// Utilization contains the utilization value.
+	Utilization float64
+	// UtilizationBranches contains the utilization branches value.
+	UtilizationBranches float64
+	// UtilizationDefaultBranch contains the utilization default branch value.
 	UtilizationDefaultBranch float64
-	Resources                []Utilization
+	// Resources contains the resources value.
+	Resources []Utilization
 }
 
 // AllocateAddress allocates an IP address from a CoreIPAddressPool.
@@ -133,6 +175,7 @@ func (s *Service) AllocatePrefix(ctx context.Context, options PrefixOptions) (*A
 	return s.allocate(ctx, "InfrahubIPPrefixPoolGetResource", "IPPrefixPoolGetResourceInput", data, options.Branch, "allocate-ip-prefix")
 }
 
+// allocate executes a resource-pool mutation and records the allocated node.
 func (s *Service) allocate(ctx context.Context, operation, inputType string, input map[string]any, branch, tracker string) (*Allocation, error) {
 	var response map[string]struct {
 		OK   bool        `json:"ok"`
@@ -238,6 +281,7 @@ func (s *Service) Utilization(ctx context.Context, poolID, branch string) (*Util
 	return output, err
 }
 
+// validatePrefixLength validates the prefix length.
 func validatePrefixLength(value *int) error {
 	if value != nil && (*value < 0 || *value > 128) {
 		return fmt.Errorf("infrahub: IP prefix length must be between 0 and 128")
@@ -245,6 +289,7 @@ func validatePrefixLength(value *int) error {
 	return nil
 }
 
+// setOptional sets the optional.
 func setOptional(data map[string]any, key string, value any) {
 	switch typed := value.(type) {
 	case string:

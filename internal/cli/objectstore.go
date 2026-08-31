@@ -11,6 +11,7 @@ import (
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 )
 
+// runObjectStore runs the object store.
 func (r Runner) runObjectStore(ctx context.Context, client *infrahub.Client, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl [global flags] objectstore <get|upload|file>")
@@ -54,6 +55,7 @@ func (r Runner) runObjectStore(ctx context.Context, client *infrahub.Client, arg
 	}
 }
 
+// runObjectStoreFile runs the object store file.
 func (r Runner) runObjectStoreFile(ctx context.Context, client *infrahub.Client, args []string) int {
 	command := flag.NewFlagSet("objectstore file", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -94,6 +96,7 @@ func (r Runner) runObjectStoreFile(ctx context.Context, client *infrahub.Client,
 	return r.writeText(content)
 }
 
+// writeText writes the text.
 func (r Runner) writeText(value string) int {
 	if !strings.HasSuffix(value, "\n") {
 		value += "\n"

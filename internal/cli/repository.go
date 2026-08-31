@@ -8,6 +8,7 @@ import (
 	infrahub "github.com/Helvethink/infrahub-go-sdk"
 )
 
+// runRepository runs the repository.
 func (r Runner) runRepository(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl [global flags] repository <list>")

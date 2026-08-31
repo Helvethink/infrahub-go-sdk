@@ -13,67 +13,99 @@ import (
 type Action string
 
 const (
-	ActionAdded     Action = "ADDED"
-	ActionUpdated   Action = "UPDATED"
-	ActionRemoved   Action = "REMOVED"
+	// ActionAdded identifies an added object or field.
+	ActionAdded Action = "ADDED"
+	// ActionUpdated identifies an updated object or field.
+	ActionUpdated Action = "UPDATED"
+	// ActionRemoved identifies a removed object or field.
+	ActionRemoved Action = "REMOVED"
+	// ActionUnchanged identifies an unchanged object or field.
 	ActionUnchanged Action = "UNCHANGED"
-	ActionConflict  Action = "CONFLICT"
+	// ActionConflict identifies a conflicting change.
+	ActionConflict Action = "CONFLICT"
 )
 
 // ElementType identifies an attribute or relationship change.
 type ElementType string
 
 const (
-	ElementTypeAttribute        ElementType = "ATTRIBUTE"
-	ElementTypeRelationshipOne  ElementType = "RELATIONSHIP_ONE"
+	// ElementTypeAttribute identifies an attribute diff.
+	ElementTypeAttribute ElementType = "ATTRIBUTE"
+	// ElementTypeRelationshipOne identifies a cardinality-one relationship diff.
+	ElementTypeRelationshipOne ElementType = "RELATIONSHIP_ONE"
+	// ElementTypeRelationshipMany identifies a cardinality-many relationship diff.
 	ElementTypeRelationshipMany ElementType = "RELATIONSHIP_MANY"
 )
 
 // Counts summarizes additions, updates, and removals.
-type Counts struct{ Added, Updated, Removed int }
+type Counts struct {
+	// Added, Updated, and Removed count changes by action.
+	Added, Updated, Removed int
+}
 
 // Peer describes one changed peer of a cardinality-many relationship.
 type Peer struct {
-	Action  Action
+	// Action contains the action value.
+	Action Action
+	// Summary contains the summary value.
 	Summary Counts
 }
 
 // Element describes one changed attribute or relationship.
 type Element struct {
-	Name    string
-	Type    ElementType
-	Action  Action
+	// Name is the human-readable name.
+	Name string
+	// Type contains the type value.
+	Type ElementType
+	// Action contains the action value.
+	Action Action
+	// Summary contains the summary value.
 	Summary Counts
-	Peers   []Peer
+	// Peers contains the peers value.
+	Peers []Peer
 }
 
 // Node describes changes to one Infrahub node.
 type Node struct {
+	// Branch, Kind, ID contain the corresponding node values.
 	Branch, Kind, ID string
-	Action           Action
-	DisplayLabel     string
-	Summary          Counts
-	Elements         []Element
+	// Action contains the action value.
+	Action Action
+	// DisplayLabel is the human-readable display label.
+	DisplayLabel string
+	// Summary contains the summary value.
+	Summary Counts
+	// Elements contains the elements value.
+	Elements []Element
 }
 
 // Tree contains complete diff metadata and changed nodes.
 type Tree struct {
-	Name                                       *string
-	FromTime, ToTime                           time.Time
-	BaseBranch, DiffBranch                     string
-	Added, Updated, Removed, Conflicts         int
+	// Name is the human-readable name.
+	Name *string
+	// FromTime, ToTime contain the corresponding tree values.
+	FromTime, ToTime time.Time
+	// BaseBranch, DiffBranch contain the corresponding tree values.
+	BaseBranch, DiffBranch string
+	// Added, Updated, Removed, Conflicts contain the corresponding tree values.
+	Added, Updated, Removed, Conflicts int
+	// UntrackedBaseChanges, UntrackedDiffChanges contain the corresponding tree values.
 	UntrackedBaseChanges, UntrackedDiffChanges int
-	Nodes                                      []Node
+	// Nodes contains the nodes in this result.
+	Nodes []Node
 }
 
 // Options selects a stored or time-bounded branch diff.
 type Options struct {
-	Branch, Name     string
+	// Branch, Name contain the corresponding options values.
+	Branch, Name string
+	// FromTime, ToTime contain the corresponding options values.
 	FromTime, ToTime time.Time
 }
 
 // Executor is the minimal GraphQL behavior required by Service.
 type Executor interface {
+	// Execute runs a GraphQL operation and decodes its data.
 	Execute(context.Context, api.GraphQLRequest, any) error
 }
 
@@ -100,6 +132,7 @@ func (s *Service) Tree(ctx context.Context, options Options) (*Tree, error) {
 
 const nodeFields = `uuid kind status label num_added num_updated num_removed attributes { name status num_added num_updated num_removed } relationships { name status cardinality num_added num_updated num_removed elements { status num_added num_updated num_removed } }`
 
+// execute retrieves and converts a diff tree with optional global metadata.
 func (s *Service) execute(ctx context.Context, options Options, metadata bool) (*Tree, error) {
 	if options.Branch == "" {
 		return nil, fmt.Errorf("infrahub: diff branch must not be empty")
@@ -125,25 +158,32 @@ func (s *Service) execute(ctx context.Context, options Options, metadata bool) (
 	return response.Tree.convert(options.Branch), err
 }
 
+// rawCounts holds internal data used by the raw counts workflow.
 type rawCounts struct {
 	Added   int `json:"num_added"`
 	Updated int `json:"num_updated"`
 	Removed int `json:"num_removed"`
 }
 
+// convert maps wire count fields to the public Counts type.
 func (c rawCounts) convert() Counts {
 	return Counts(c)
 }
 
+// rawPeer holds internal data used by the raw peer workflow.
 type rawPeer struct {
 	Status Action `json:"status"`
 	rawCounts
 }
+
+// rawAttribute holds internal data used by the raw attribute workflow.
 type rawAttribute struct {
 	Name   string `json:"name"`
 	Status Action `json:"status"`
 	rawCounts
 }
+
+// rawRelationship holds internal data used by the raw relationship workflow.
 type rawRelationship struct {
 	Name        string    `json:"name"`
 	Status      Action    `json:"status"`
@@ -151,6 +191,8 @@ type rawRelationship struct {
 	Elements    []rawPeer `json:"elements"`
 	rawCounts
 }
+
+// rawNode holds internal data used by the raw node workflow.
 type rawNode struct {
 	UUID          string            `json:"uuid"`
 	Kind          string            `json:"kind"`
@@ -160,6 +202,8 @@ type rawNode struct {
 	Relationships []rawRelationship `json:"relationships"`
 	rawCounts
 }
+
+// rawTree holds internal data used by the raw tree workflow.
 type rawTree struct {
 	Name                 *string   `json:"name"`
 	FromTime             time.Time `json:"from_time"`
@@ -175,6 +219,7 @@ type rawTree struct {
 	Nodes                []rawNode `json:"nodes"`
 }
 
+// convert maps a wire diff tree to its stable public representation.
 func (t rawTree) convert(branch string) *Tree {
 	tree := &Tree{Name: t.Name, FromTime: t.FromTime, ToTime: t.ToTime, BaseBranch: t.BaseBranch, DiffBranch: t.DiffBranch, Added: t.Added, Updated: t.Updated, Removed: t.Removed, Conflicts: t.Conflicts, UntrackedBaseChanges: t.UntrackedBaseChanges, UntrackedDiffChanges: t.UntrackedDiffChanges, Nodes: make([]Node, 0, len(t.Nodes))}
 	for _, raw := range t.Nodes {
@@ -201,6 +246,7 @@ func (t rawTree) convert(branch string) *Tree {
 	return tree
 }
 
+// nullableString converts an empty string to a GraphQL null value.
 func nullableString(value string) any {
 	if value == "" {
 		return nil
@@ -208,6 +254,7 @@ func nullableString(value string) any {
 	return value
 }
 
+// nullableTime converts a zero time to a GraphQL null value.
 func nullableTime(value time.Time) any {
 	if value.IsZero() {
 		return nil

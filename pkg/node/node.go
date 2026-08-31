@@ -17,11 +17,16 @@ const identityFields = `id kind: __typename hfid display_label`
 
 // Node identifies an Infrahub object while preserving its dynamic fields.
 type Node struct {
-	ID           string         `json:"id"`
-	Kind         string         `json:"kind"`
-	HFID         []any          `json:"hfid"`
-	DisplayLabel string         `json:"display_label"`
-	Fields       map[string]any `json:"-"`
+	// ID is the stable Infrahub identifier.
+	ID string `json:"id"`
+	// Kind is the Infrahub schema kind.
+	Kind string `json:"kind"`
+	// HFID contains the object's human-friendly identifier components.
+	HFID []any `json:"hfid"`
+	// DisplayLabel is the human-readable display label.
+	DisplayLabel string `json:"display_label"`
+	// Fields contains dynamically selected schema-defined fields.
+	Fields map[string]any `json:"-"`
 }
 
 // UnmarshalJSON preserves every selected schema-specific field in Fields.
@@ -48,6 +53,7 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 
 // Executor is the minimal GraphQL behavior required by Service.
 type Executor interface {
+	// Execute runs a GraphQL operation and decodes its data.
 	Execute(context.Context, api.GraphQLRequest, any) error
 }
 
@@ -59,15 +65,21 @@ func NewService(client Executor) *Service { return &Service{client: client} }
 
 // Page is one offset-based page of Infrahub nodes.
 type Page struct {
-	Count  int
+	// Count is the total number of matching items.
+	Count int
+	// Offset is the zero-based pagination offset.
 	Offset int
-	Limit  int
-	Nodes  []Node
+	// Limit is the requested page size.
+	Limit int
+	// Nodes contains the nodes in this result.
+	Nodes []Node
 }
 
 // MutationResult is returned by create and update mutations.
 type MutationResult struct {
-	OK     bool  `json:"ok"`
+	// OK contains the ok value.
+	OK bool `json:"ok"`
+	// Object contains the object value.
 	Object *Node `json:"object"`
 }
 
@@ -131,6 +143,7 @@ func (s *Service) Delete(ctx context.Context, kind string, data map[string]any, 
 	return nil
 }
 
+// mutate executes a dynamic node mutation and validates its operation result.
 func (s *Service) mutate(ctx context.Context, kind, action string, input map[string]any, branch string) (*Node, error) {
 	if err := validateKind(kind); err != nil {
 		return nil, err
@@ -155,6 +168,7 @@ func (s *Service) mutate(ctx context.Context, kind, action string, input map[str
 	return result.Object, nil
 }
 
+// getOne gets the one.
 func (s *Service) getOne(ctx context.Context, kind, suffix, identifier, variableType string, value any, branch string) (*Node, error) {
 	if err := validateKind(kind); err != nil {
 		return nil, err
@@ -178,6 +192,7 @@ func (s *Service) getOne(ctx context.Context, kind, suffix, identifier, variable
 	return &page.Nodes[0], nil
 }
 
+// queryPage executes a generated node query and normalizes its page metadata.
 func (s *Service) queryPage(ctx context.Context, kind string, request api.GraphQLRequest) (*Page, error) {
 	var response map[string]struct {
 		Count int `json:"count"`
@@ -194,6 +209,7 @@ func (s *Service) queryPage(ctx context.Context, kind string, request api.GraphQ
 	return page, err
 }
 
+// validateKind validates the kind.
 func validateKind(kind string) error {
 	if !kindPattern.MatchString(kind) {
 		return fmt.Errorf("infrahub: invalid kind %q", kind)

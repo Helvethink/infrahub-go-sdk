@@ -18,7 +18,9 @@ import (
 
 // Client is the minimal REST behavior required by Service.
 type Client interface {
+	// EndpointSegments resolves individually escaped REST path segments.
 	EndpointSegments([]string, url.Values) *url.URL
+	// DoResponse executes a bounded HTTP request and preserves response metadata.
 	DoResponse(context.Context, string, *url.URL, io.Reader, http.Header, string) (*api.HTTPResponse, error)
 }
 
@@ -30,12 +32,19 @@ func NewService(client Client) *Service { return &Service{client: client} }
 
 // QueryOptions configures execution of a stored CoreGraphQLQuery.
 type QueryOptions struct {
-	Name        string
-	Variables   map[string]any
-	Parameters  url.Values
-	Branch      string
-	At          time.Time
+	// Name is the human-readable name.
+	Name string
+	// Variables contains GraphQL variable values.
+	Variables map[string]any
+	// Parameters contains the parameters value.
+	Parameters url.Values
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// At selects an optional point in time.
+	At time.Time
+	// UpdateGroup contains the update group value.
 	UpdateGroup bool
+	// Subscribers contains the subscribers value.
 	Subscribers []string
 }
 
@@ -89,7 +98,10 @@ type Generator func(context.Context, map[string]any) error
 type Check func(context.Context, map[string]any, *Reporter) error
 
 // RunOptions configures collection for an automation execution.
-type RunOptions struct{ Query QueryOptions }
+type RunOptions struct {
+	// Query configures the named query that supplies automation input.
+	Query QueryOptions
+}
 
 // RunTransform collects query data and invokes transform.
 func (s *Service) RunTransform(ctx context.Context, options RunOptions, transform Transform) (any, error) {
@@ -120,19 +132,28 @@ func (s *Service) RunGenerator(ctx context.Context, options RunOptions, generato
 type Severity string
 
 const (
-	SeverityInfo    Severity = "INFO"
+	// SeverityInfo identifies an informational finding.
+	SeverityInfo Severity = "INFO"
+	// SeverityWarning identifies a warning finding.
 	SeverityWarning Severity = "WARNING"
-	SeverityError   Severity = "ERROR"
+	// SeverityError identifies an error finding.
+	SeverityError Severity = "ERROR"
 )
 
 // Finding is one structured check message.
 type Finding struct {
-	Severity   Severity
-	Message    string
-	Branch     string
-	ObjectID   string
+	// Severity contains the severity value.
+	Severity Severity
+	// Message contains the human-readable message.
+	Message string
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// ObjectID contains the object ID value.
+	ObjectID string
+	// ObjectType contains the object type value.
 	ObjectType string
-	Sequence   int
+	// Sequence contains the sequence value.
+	Sequence int
 }
 
 // Reporter safely collects findings from concurrent check work.
@@ -181,7 +202,9 @@ func (r *Reporter) Findings() []Finding {
 
 // CheckResult contains a check's pass state and findings.
 type CheckResult struct {
-	Passed   bool
+	// Passed reports whether the check completed without error findings.
+	Passed bool
+	// Findings contains findings emitted by the check.
 	Findings []Finding
 }
 
@@ -214,6 +237,7 @@ func (s *Service) RunCheck(ctx context.Context, options RunOptions, check Check)
 	return &CheckResult{Passed: passed, Findings: findings}, nil
 }
 
+// collect executes a named query and extracts its data object when present.
 func (s *Service) collect(ctx context.Context, options QueryOptions) (map[string]any, error) {
 	var response map[string]any
 	if err := s.Query(ctx, options, &response); err != nil {
@@ -225,6 +249,7 @@ func (s *Service) collect(ctx context.Context, options QueryOptions) (map[string
 	return response, nil
 }
 
+// cloneValues clones the values.
 func cloneValues(values url.Values) url.Values {
 	result := make(url.Values, len(values))
 	for key, items := range values {

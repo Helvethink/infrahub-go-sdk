@@ -22,16 +22,23 @@ import (
 
 // BuildInfo contains values normally injected through linker flags.
 type BuildInfo struct {
+	// Version contains the version value.
 	Version string
-	Commit  string
-	Date    string
+	// Commit contains the commit value.
+	Commit string
+	// Date contains the date value.
+	Date string
 }
 
 // Runner owns the process-independent inputs and outputs of the CLI.
 type Runner struct {
-	Stdin  io.Reader
+	// Stdin contains the stdin value.
+	Stdin io.Reader
+	// Stdout contains the stdout value.
 	Stdout io.Writer
+	// Stderr contains the stderr value.
 	Stderr io.Writer
+	// Getenv reads environment variables without coupling Runner to process state.
 	Getenv func(string) string
 	// Logger receives structured CLI diagnostics. When nil, Runner creates a
 	// JSON logger writing to Stderr at the configured log level.
@@ -41,7 +48,8 @@ type Runner struct {
 	// UserConfigDir returns the base directory used for the optional default
 	// configuration file. It defaults to os.UserConfigDir.
 	UserConfigDir func() (string, error)
-	Build         BuildInfo
+	// Build contains the build value.
+	Build BuildInfo
 }
 
 // Run executes the CLI and returns a process exit code.
@@ -72,6 +80,7 @@ func (r Runner) Run(ctx context.Context, args []string) int {
 	return 0
 }
 
+// runVersion runs the version.
 func (r Runner) runVersion() int {
 	version := envOrValue(r.Build.Version, "dev")
 	output := "infrahubctl " + version
@@ -87,6 +96,7 @@ func (r Runner) runVersion() int {
 	return 0
 }
 
+// runBranch runs the branch.
 func (r Runner) runBranch(ctx context.Context, client *infrahub.Client, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl [global flags] branch <list|get|create|delete|rebase|validate|merge|report>")
@@ -115,6 +125,7 @@ func (r Runner) runBranch(ctx context.Context, client *infrahub.Client, args []s
 	return exitCode
 }
 
+// runBranchList runs the branch list.
 func (r Runner) runBranchList(ctx context.Context, client *infrahub.Client) int {
 	branches, err := client.Branches.List(ctx)
 	if err != nil {
@@ -123,6 +134,7 @@ func (r Runner) runBranchList(ctx context.Context, client *infrahub.Client) int 
 	return r.writeJSON(branches)
 }
 
+// runBranchGet runs the branch get.
 func (r Runner) runBranchGet(ctx context.Context, client *infrahub.Client, args []string) int {
 	if len(args) != 1 {
 		return r.usageError("usage: infrahubctl branch get <name>")
@@ -134,6 +146,7 @@ func (r Runner) runBranchGet(ctx context.Context, client *infrahub.Client, args 
 	return r.writeJSON(result)
 }
 
+// runBranchCreate runs the branch create.
 func (r Runner) runBranchCreate(ctx context.Context, client *infrahub.Client, args []string) int {
 	command := flag.NewFlagSet("branch create", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -154,6 +167,7 @@ func (r Runner) runBranchCreate(ctx context.Context, client *infrahub.Client, ar
 	return r.writeJSON(result)
 }
 
+// runBranchOperation runs the branch operation.
 func (r Runner) runBranchOperation(
 	ctx context.Context,
 	name string,
@@ -172,6 +186,7 @@ func (r Runner) runBranchOperation(
 	return 0
 }
 
+// runBranchReport runs the branch report.
 func (r Runner) runBranchReport(ctx context.Context, client *infrahub.Client, args []string) int {
 	command := flag.NewFlagSet("branch report", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -192,6 +207,7 @@ func (r Runner) runBranchReport(ctx context.Context, client *infrahub.Client, ar
 	return r.writeJSON(result)
 }
 
+// runSchema runs the schema.
 func (r Runner) runSchema(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	if len(args) == 0 {
 		return r.usageError("usage: infrahubctl [global flags] schema <graphql|load|check|export|list|show>")
@@ -225,6 +241,7 @@ func (r Runner) runSchema(ctx context.Context, client *infrahub.Client, branch s
 	}
 }
 
+// runInfo runs the info.
 func (r Runner) runInfo(client *infrahub.Client) int {
 	return r.writeJSON(map[string]string{
 		"client":         "infrahub-go-sdk",
@@ -235,6 +252,7 @@ func (r Runner) runInfo(client *infrahub.Client) int {
 	})
 }
 
+// runSchemaApply runs the schema apply.
 func (r Runner) runSchemaApply(ctx context.Context, client *infrahub.Client, branch, operation string, args []string) int {
 	command := flag.NewFlagSet("schema "+operation, flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -266,6 +284,7 @@ func (r Runner) runSchemaApply(ctx context.Context, client *infrahub.Client, bra
 	return r.writeJSON(result)
 }
 
+// runSchemaExport runs the schema export.
 func (r Runner) runSchemaExport(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("schema export", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -287,6 +306,7 @@ func (r Runner) runSchemaExport(ctx context.Context, client *infrahub.Client, br
 	return r.writeJSON(result)
 }
 
+// runSchemaList runs the schema list.
 func (r Runner) runSchemaList(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("schema list", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -308,6 +328,7 @@ func (r Runner) runSchemaList(ctx context.Context, client *infrahub.Client, bran
 	return r.writeJSON(filterSchemaKinds(result, *filter))
 }
 
+// runSchemaShow runs the schema show.
 func (r Runner) runSchemaShow(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("schema show", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -329,6 +350,7 @@ func (r Runner) runSchemaShow(ctx context.Context, client *infrahub.Client, bran
 	return r.writeJSON(item)
 }
 
+// runGraphQL runs the GraphQL.
 func (r Runner) runGraphQL(ctx context.Context, client *infrahub.Client, branch string, args []string) int {
 	command := flag.NewFlagSet("graphql", flag.ContinueOnError)
 	command.SetOutput(r.Stderr)
@@ -369,6 +391,7 @@ func (r Runner) runGraphQL(ctx context.Context, client *infrahub.Client, branch 
 	return 0
 }
 
+// writeJSON writes the JSON.
 func (r Runner) writeJSON(value any) int {
 	encoder := json.NewEncoder(r.Stdout)
 	encoder.SetIndent("", "  ")
@@ -378,6 +401,7 @@ func (r Runner) writeJSON(value any) int {
 	return 0
 }
 
+// fail writes a runtime diagnostic and returns the runtime-failure exit code.
 func (r Runner) fail(err error) int {
 	if !r.logErrors {
 		_, _ = fmt.Fprintln(r.Stderr, "infrahubctl:", err)
@@ -391,11 +415,13 @@ func (r Runner) fail(err error) int {
 	return 1
 }
 
+// usageError writes a usage diagnostic and returns the usage-error exit code.
 func (r Runner) usageError(message string) int {
 	_, _ = fmt.Fprintln(r.Stderr, message)
 	return 2
 }
 
+// printUsage writes the root command usage text.
 func (r Runner) printUsage() {
 	_, _ = fmt.Fprintln(r.Stderr, `usage: infrahubctl [global flags] <command>
 
@@ -431,6 +457,7 @@ global flags:
   -log-level string logging level (INFRAHUB_LOG_LEVEL, default error)`)
 }
 
+// withDefaults returns a Runner populated with default dependencies.
 func (r Runner) withDefaults() Runner {
 	if r.Stdin == nil {
 		r.Stdin = os.Stdin
@@ -457,6 +484,7 @@ func (r Runner) withDefaults() Runner {
 	return r
 }
 
+// loadConfig loads the config.
 func (r Runner) loadConfig(path string, explicitlySet bool) (sdkconfig.Config, error) {
 	if explicitlySet && path == "" {
 		return sdkconfig.Config{}, fmt.Errorf("config path must not be empty")
@@ -486,6 +514,7 @@ func (r Runner) loadConfig(path string, explicitlySet bool) (sdkconfig.Config, e
 	return result, nil
 }
 
+// envOrValue returns value or fallback when value is empty.
 func envOrValue(value, fallback string) string {
 	if value != "" {
 		return value
@@ -493,6 +522,7 @@ func envOrValue(value, fallback string) string {
 	return fallback
 }
 
+// flagExitCode maps flag parsing results to CLI exit codes.
 func flagExitCode(err error) int {
 	if errors.Is(err, flag.ErrHelp) {
 		return 0

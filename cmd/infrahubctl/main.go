@@ -16,10 +16,12 @@ var (
 	date    = ""
 )
 
+// main starts the infrahubctl process.
 func main() {
 	os.Exit(run())
 }
 
+// run configures and executes infrahubctl.
 func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

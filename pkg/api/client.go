@@ -18,12 +18,18 @@ const defaultMaxBodyBytes = int64(16 << 20)
 
 // Config configures the low-level protocol client.
 type Config struct {
-	HTTPClient    *http.Client
-	Token         string
+	// HTTPClient performs HTTP requests and is never mutated by the SDK.
+	HTTPClient *http.Client
+	// Token contains the Infrahub API token.
+	Token string
+	// DefaultBranch is used when a request does not select a branch.
 	DefaultBranch string
-	UserAgent     string
-	Headers       http.Header
-	MaxBodyBytes  int64
+	// UserAgent is sent with every HTTP request.
+	UserAgent string
+	// Headers contains request headers copied by the client.
+	Headers http.Header
+	// MaxBodyBytes limits the number of response bytes read by the client.
+	MaxBodyBytes int64
 }
 
 // Client is a concurrency-safe Infrahub protocol client.
@@ -79,28 +85,40 @@ func (c *Client) DefaultBranch() string { return c.defaultBranch }
 
 // GraphQLRequest describes an arbitrary GraphQL operation.
 type GraphQLRequest struct {
-	Query         string
-	Variables     map[string]any
+	// Query contains the GraphQL query or query selection.
+	Query string
+	// Variables contains GraphQL variable values.
+	Variables map[string]any
+	// OperationName selects the GraphQL operation to execute.
 	OperationName string
-	Branch        string
-	At            time.Time
-	Tracker       string
-	Headers       http.Header
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// At selects an optional point in time.
+	At time.Time
+	// Tracker sets the request tracker identifier.
+	Tracker string
+	// Headers contains request headers copied by the client.
+	Headers http.Header
 }
 
 // HTTPResponse contains the bounded body and metadata of a successful request.
 type HTTPResponse struct {
+	// StatusCode is the HTTP response status code.
 	StatusCode int
-	Header     http.Header
-	Body       []byte
+	// Header contains a copy of the HTTP response headers.
+	Header http.Header
+	// Body contains the bounded HTTP response body.
+	Body []byte
 }
 
+// graphQLPayload is the wire representation of a GraphQL request.
 type graphQLPayload struct {
 	Query         string         `json:"query"`
 	Variables     map[string]any `json:"variables,omitempty"`
 	OperationName string         `json:"operationName,omitempty"`
 }
 
+// graphQLResponse is the wire representation of a GraphQL response.
 type graphQLResponse struct {
 	Data   json.RawMessage    `json:"data"`
 	Errors []GraphQLErrorItem `json:"errors"`
@@ -166,6 +184,7 @@ func (c *Client) EndpointSegments(segments []string, query url.Values) *url.URL 
 	return &u
 }
 
+// escapePathSegment escapes one URL path segment.
 func escapePathSegment(segment string) string {
 	switch segment {
 	case ".":
@@ -228,6 +247,7 @@ func (c *Client) DoResponse(ctx context.Context, method string, endpoint *url.UR
 	return &HTTPResponse{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: data}, nil
 }
 
+// graphQLEndpoint builds the branch-aware GraphQL endpoint.
 func (c *Client) graphQLEndpoint(branch string, at time.Time) *url.URL {
 	if branch == "" {
 		branch = c.defaultBranch
@@ -245,6 +265,7 @@ func (c *Client) graphQLEndpoint(branch string, at time.Time) *url.URL {
 	return &u
 }
 
+// copyHeaders appends all source header values to destination.
 func copyHeaders(dst, src http.Header) {
 	for name, values := range src {
 		for _, value := range values {
@@ -253,6 +274,7 @@ func copyHeaders(dst, src http.Header) {
 	}
 }
 
+// safeExcerpt returns a bounded response excerpt with secrets redacted.
 func safeExcerpt(body []byte, limit int, secrets ...string) string {
 	if len(body) > limit {
 		body = body[:limit]

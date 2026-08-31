@@ -19,6 +19,7 @@ const (
 	optionalClientCommand = "optional-client"
 )
 
+// commandState holds shared state while constructing and executing CLI commands.
 type commandState struct {
 	runner Runner
 	ctx    context.Context
@@ -33,10 +34,13 @@ type commandState struct {
 	client   *infrahub.Client
 }
 
+// exitStatusError carries a command exit status without duplicate output.
 type exitStatusError struct{ code int }
 
+// Error implements error without duplicating diagnostics already written by the command.
 func (e *exitStatusError) Error() string { return "" }
 
+// newRootCommand creates the root command.
 func newRootCommand(ctx context.Context, runner Runner) *cobra.Command {
 	state := &commandState{runner: runner, ctx: ctx}
 	root := &cobra.Command{
@@ -85,6 +89,7 @@ func newRootCommand(ctx context.Context, runner Runner) *cobra.Command {
 	return root
 }
 
+// prepareClient prepares the client.
 func (s *commandState) prepareClient(command *cobra.Command, args []string) error {
 	if skipClientPreparation(command, args) {
 		return nil
@@ -101,6 +106,7 @@ func (s *commandState) prepareClient(command *cobra.Command, args []string) erro
 	return s.initializeClient(command)
 }
 
+// skipClientPreparation reports whether command can run without preparing a client.
 func skipClientPreparation(command *cobra.Command, args []string) bool {
 	if command == command.Root() || command.Name() == "help" {
 		return true
@@ -113,12 +119,14 @@ func skipClientPreparation(command *cobra.Command, args []string) bool {
 	return false
 }
 
+// configureInitialLogger configures the initial logger.
 func (s *commandState) configureInitialLogger(command *cobra.Command) error {
 	flags := command.Root().PersistentFlags()
 	value := environmentLogLevel(s.runner.Getenv, s.logLevel, flags.Changed("log-level"))
 	return s.configureLogger(value)
 }
 
+// loadClientSettings loads the client settings.
 func (s *commandState) loadClientSettings(command *cobra.Command) error {
 	settings, err := s.runner.loadConfig(s.configPath, command.Root().PersistentFlags().Changed("config"))
 	if err != nil {
@@ -139,6 +147,7 @@ func (s *commandState) loadClientSettings(command *cobra.Command) error {
 	return nil
 }
 
+// newSettingsLoader creates the settings loader.
 func newSettingsLoader(settings sdkconfig.Config, getenv func(string) string) (*viper.Viper, error) {
 	loader := viper.New()
 	loader.SetDefault("default_branch", "main")
@@ -152,6 +161,7 @@ func newSettingsLoader(settings sdkconfig.Config, getenv func(string) string) (*
 	return loader, nil
 }
 
+// bindSettingsFlags binds persistent flags over configuration and environment values.
 func (s *commandState) bindSettingsFlags(loader *viper.Viper, flags *flag.FlagSet) error {
 	for key, name := range map[string]string{
 		"address": "address", "api_token": "token", "default_branch": "branch", "log_level": "log-level",
@@ -175,6 +185,7 @@ func (s *commandState) bindSettingsFlags(loader *viper.Viper, flags *flag.FlagSe
 	return nil
 }
 
+// settingsFromLoader sets the tings from loader.
 func settingsFromLoader(loader *viper.Viper) sdkconfig.Config {
 	return sdkconfig.Config{
 		Address:       loader.GetString("address"),
@@ -184,6 +195,7 @@ func settingsFromLoader(loader *viper.Viper) sdkconfig.Config {
 	}
 }
 
+// initializeClient initializes the client.
 func (s *commandState) initializeClient(command *cobra.Command) error {
 	if s.settings.Address == "" {
 		if command.Annotations[optionalClientCommand] == "true" {
@@ -199,6 +211,7 @@ func (s *commandState) initializeClient(command *cobra.Command) error {
 	return nil
 }
 
+// configureLogger configures the logger.
 func (s *commandState) configureLogger(value string) error {
 	if s.runner.loggerInjected {
 		return nil
@@ -217,6 +230,7 @@ func (s *commandState) configureLogger(value string) error {
 	return nil
 }
 
+// environmentLogLevel resolves the initial log level before full configuration loading.
 func environmentLogLevel(getenv func(string) string, flagValue string, flagSet bool) string {
 	if flagSet {
 		return flagValue
@@ -227,6 +241,7 @@ func environmentLogLevel(getenv func(string) string, flagValue string, flagSet b
 	return "error"
 }
 
+// normalizeNamedFlags normalizes the named flags.
 func normalizeNamedFlags(args []string, names map[string]struct{}) []string {
 	result := append([]string(nil), args...)
 	for index, arg := range result {
@@ -244,6 +259,7 @@ func normalizeNamedFlags(args []string, names map[string]struct{}) []string {
 	return result
 }
 
+// configMap converts SDK configuration into keys understood by the settings loader.
 func configMap(settings sdkconfig.Config) map[string]any {
 	result := map[string]any{}
 	if settings.Address != "" {
@@ -261,6 +277,7 @@ func configMap(settings sdkconfig.Config) map[string]any {
 	return result
 }
 
+// environmentMap reads supported environment variables into settings-loader keys.
 func environmentMap(getenv func(string) string) map[string]any {
 	result := map[string]any{}
 	if value := getenv(sdkconfig.EnvAddress); value != "" {
@@ -280,6 +297,7 @@ func environmentMap(getenv func(string) string) map[string]any {
 	return result
 }
 
+// statusError wraps a process exit code for Cobra error propagation.
 func statusError(code int) error {
 	if code == 0 {
 		return nil
@@ -287,6 +305,7 @@ func statusError(code int) error {
 	return &exitStatusError{code: code}
 }
 
+// leaf creates a non-interactive leaf command backed by run.
 func (s *commandState) leaf(use string, run func([]string) int) *cobra.Command {
 	return &cobra.Command{
 		Use:                use,
@@ -302,6 +321,7 @@ func (s *commandState) leaf(use string, run func([]string) int) *cobra.Command {
 	}
 }
 
+// group creates a command that groups related subcommands.
 func (s *commandState) group(use string, run func([]string) int, leaves ...string) *cobra.Command {
 	command := &cobra.Command{
 		Use: use,
@@ -318,6 +338,7 @@ func (s *commandState) group(use string, run func([]string) int, leaves ...strin
 	return command
 }
 
+// execute adapts an exit-code command handler to Cobra's error contract.
 func (s *commandState) execute(command *cobra.Command, run func() int) error {
 	started := time.Now()
 	s.runner.Logger.Info("command started", zap.String("command", command.CommandPath()))
@@ -330,28 +351,33 @@ func (s *commandState) execute(command *cobra.Command, run func() int) error {
 	return statusError(code)
 }
 
+// versionCommand builds the version command.
 func (s *commandState) versionCommand() *cobra.Command {
 	command := s.leaf("version", func([]string) int { return s.runner.runVersion() })
 	command.Annotations = map[string]string{offlineCommand: "true"}
 	return command
 }
 
+// infoCommand builds the client information command.
 func (s *commandState) infoCommand() *cobra.Command {
 	return s.leaf("info", func([]string) int { return s.runner.runInfo(s.client) })
 }
 
+// branchCommand builds the branch command tree.
 func (s *commandState) branchCommand() *cobra.Command {
 	return s.group("branch", func(args []string) int {
 		return s.runner.runBranch(s.ctx, s.client, args)
 	}, "list", "get", "create", "delete", "rebase", "validate", "merge", "report")
 }
 
+// diffCommand builds the diff command.
 func (s *commandState) diffCommand() *cobra.Command {
 	return s.group("diff", func(args []string) int {
 		return s.runner.runDiff(s.ctx, s.client, s.settings.DefaultBranch, args)
 	}, "tree", "summary")
 }
 
+// objectCommand builds the dynamic-object command tree.
 func (s *commandState) objectCommand() *cobra.Command {
 	command := s.group("object", func(args []string) int {
 		return s.runner.runObject(s.ctx, s.client, s.settings.DefaultBranch, args)
@@ -362,48 +388,56 @@ func (s *commandState) objectCommand() *cobra.Command {
 	return command
 }
 
+// objectStoreCommand builds the object-store command tree.
 func (s *commandState) objectStoreCommand() *cobra.Command {
 	return s.group("objectstore", func(args []string) int {
 		return s.runner.runObjectStore(s.ctx, s.client, args)
 	}, "get", "upload", "file")
 }
 
+// repositoryCommand builds the repository command tree.
 func (s *commandState) repositoryCommand() *cobra.Command {
 	return s.group("repository", func(args []string) int {
 		return s.runner.runRepository(s.ctx, s.client, s.settings.DefaultBranch, args)
 	}, "list")
 }
 
+// schemaCommand builds the schema command tree.
 func (s *commandState) schemaCommand() *cobra.Command {
 	return s.group("schema", func(args []string) int {
 		return s.runner.runSchema(s.ctx, s.client, s.settings.DefaultBranch, args)
 	}, "graphql", "load", "check", "export", "list", "show")
 }
 
+// taskCommand builds the task command tree.
 func (s *commandState) taskCommand() *cobra.Command {
 	return s.group("task", func(args []string) int {
 		return s.runner.runTask(s.ctx, s.client, args)
 	}, "list")
 }
 
+// graphQLCommand builds the arbitrary GraphQL command.
 func (s *commandState) graphQLCommand() *cobra.Command {
 	return s.leaf("graphql", func(args []string) int {
 		return s.runner.runGraphQL(s.ctx, s.client, s.settings.DefaultBranch, args)
 	})
 }
 
+// dumpCommand builds the data-dump command.
 func (s *commandState) dumpCommand() *cobra.Command {
 	return s.leaf("dump", func(args []string) int {
 		return s.runner.runDump(s.ctx, s.client, s.settings.DefaultBranch, args)
 	})
 }
 
+// loadCommand loads the command.
 func (s *commandState) loadCommand() *cobra.Command {
 	return s.leaf("load", func(args []string) int {
 		return s.runner.runLoad(s.ctx, s.client, s.settings.DefaultBranch, args)
 	})
 }
 
+// menuCommand builds the menu preparation command.
 func (s *commandState) menuCommand() *cobra.Command {
 	command := s.group("menu", func(args []string) int {
 		return s.runner.runMenu(s.ctx, s.client, s.settings.DefaultBranch, args)
@@ -412,6 +446,7 @@ func (s *commandState) menuCommand() *cobra.Command {
 	return command
 }
 
+// marketplaceCommand builds the marketplace query command.
 func (s *commandState) marketplaceCommand() *cobra.Command {
 	command := s.group("marketplace", func(args []string) int {
 		return s.runner.runMarketplace(s.ctx, args)
@@ -422,6 +457,7 @@ func (s *commandState) marketplaceCommand() *cobra.Command {
 	return command
 }
 
+// protocolsCommand builds the protocol-generation command.
 func (s *commandState) protocolsCommand() *cobra.Command {
 	command := s.leaf("protocols", func(args []string) int {
 		return s.runner.runProtocols(s.ctx, s.client, s.settings.DefaultBranch, args)
@@ -430,12 +466,14 @@ func (s *commandState) protocolsCommand() *cobra.Command {
 	return command
 }
 
+// telemetryCommand builds the telemetry command tree.
 func (s *commandState) telemetryCommand() *cobra.Command {
 	return s.group("telemetry", func(args []string) int {
 		return s.runner.runTelemetry(s.ctx, s.client, args)
 	}, "list", "export")
 }
 
+// validateCommand validates the command.
 func (s *commandState) validateCommand() *cobra.Command {
 	command := s.group("validate", func(args []string) int {
 		return s.runner.runValidate(s.ctx, s.client, s.settings.DefaultBranch, args)

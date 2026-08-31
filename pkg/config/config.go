@@ -13,23 +13,35 @@ import (
 )
 
 const (
-	EnvAddress       = "INFRAHUB_ADDRESS"
-	EnvAPIToken      = "INFRAHUB_API_TOKEN" // #nosec G101 -- This is an environment variable name, not a credential.
+	// EnvAddress names the primary environment variable for the server address.
+	EnvAddress = "INFRAHUB_ADDRESS"
+	// EnvAPIToken names the environment variable for the Infrahub API token.
+	EnvAPIToken = "INFRAHUB_API_TOKEN" // #nosec G101 -- This is an environment variable name, not a credential.
+	// EnvDefaultBranch names the primary environment variable for the default branch.
 	EnvDefaultBranch = "INFRAHUB_BRANCH"
-	EnvConfigPath    = "INFRAHUB_CONFIG"
-	EnvLogLevel      = "INFRAHUB_LOG_LEVEL"
+	// EnvConfigPath names the primary environment variable for the configuration path.
+	EnvConfigPath = "INFRAHUB_CONFIG"
+	// EnvLogLevel names the environment variable for the CLI log level.
+	EnvLogLevel = "INFRAHUB_LOG_LEVEL"
 
+	// EnvDefaultBranchAlias names the compatibility alias for the default branch.
 	EnvDefaultBranchAlias = "INFRAHUB_DEFAULT_BRANCH"
-	EnvConfigPathAlias    = "INFRAHUBCTL_CONFIG"
+	// EnvConfigPathAlias names the compatibility alias for the configuration path.
+	EnvConfigPathAlias = "INFRAHUBCTL_CONFIG"
 )
 
 // Config contains connection settings shared by the SDK and infrahubctl.
 type Config struct {
-	Address       string `mapstructure:"address"`
+	// Address is the preferred Infrahub server address key.
+	Address string `mapstructure:"address"`
+	// ServerAddress is the legacy alias for Address.
 	ServerAddress string `mapstructure:"server_address"`
-	APIToken      string `mapstructure:"api_token"`
+	// APIToken contains the Infrahub API token.
+	APIToken string `mapstructure:"api_token"`
+	// DefaultBranch is used when a request does not select a branch.
 	DefaultBranch string `mapstructure:"default_branch"`
-	LogLevel      string `mapstructure:"log_level"`
+	// LogLevel controls CLI diagnostic verbosity.
+	LogLevel string `mapstructure:"log_level"`
 }
 
 // Load reads a strict TOML configuration file from path.
