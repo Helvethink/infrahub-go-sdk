@@ -248,6 +248,7 @@ Transforms, idempotent generators and structured checks are implemented as compi
 - Schema fetch, SDL export, validation, and loading
 - Generic node create/update/delete
 - Generic node list/get-by-ID/get-by-HFID with offset pagination
+- Generic node retrieval across all offset-paginated pages
 - Repository discovery across branches and protected commit updates
 - Request-scoped tracker overrides and concurrent tracking groups
 - Stored object upload/download and text-file retrieval by storage ID, node ID, or HFID
