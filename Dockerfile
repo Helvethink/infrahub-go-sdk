@@ -8,7 +8,10 @@ ENV CGO_ENABLED=0
 
 WORKDIR /src
 
-RUN apk add --no-cache ca-certificates=20260611-r0
+# The Alpine base image fixes the repository version. Do not pin a package
+# revision here because Alpine removes superseded revisions from its mirrors.
+# hadolint ignore=DL3018
+RUN apk add --no-cache ca-certificates
 
 FROM scratch
 
