@@ -11,7 +11,7 @@ The reference implementation is [`opsmill/infrahub-sdk-python`](https://github.c
 | branch manager | Available | `Client.Branches` |
 | schema fetch/load/check/SDL | Available | `Client.Schema` |
 | generic node create/update/delete | Available | `Client.Nodes` |
-| identity-only `get`, `all`, pagination | Available | `GetByID`, `GetByHFID`, `List` |
+| identity-only `get`, `all`, pagination | Available | `GetByID`, `GetByHFID`, `List`, `All` |
 | dynamic attribute filters/selections | Available | `node.Service.Query` |
 | graph traversal | Available | `Client.Traversal` and `pkg/traversal` |
 | diff summary/tree | Available | `Client.Diffs` and `pkg/diff` |
