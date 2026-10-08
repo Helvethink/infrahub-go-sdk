@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -211,6 +212,70 @@ func TestQueryDynamicFiltersAndSelections(t *testing.T) {
 	name, ok := page.Nodes[0].Fields["name"].(map[string]any)
 	if !ok || name["value"] != "staging" {
 		t.Fatalf("dynamic fields = %#v", page.Nodes[0].Fields)
+	}
+}
+
+func TestAllPaginatesDynamicQuery(t *testing.T) {
+	t.Parallel()
+	var offsets []float64
+	service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+		var request payload
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		offset, ok := request.Variables["offset"].(float64)
+		if !ok {
+			t.Errorf("offset = %T %v", request.Variables["offset"], request.Variables["offset"])
+			return
+		}
+		offsets = append(offsets, offset)
+		if request.Variables["limit"] != float64(defaultPageSize) || request.Variables["filter0"] != "staging" {
+			t.Errorf("variables = %#v", request.Variables)
+		}
+		if !strings.Contains(request.Query, "name { value }") {
+			t.Errorf("query = %s", request.Query)
+		}
+		id := "tag-2"
+		if offset == 3 {
+			id = "tag-3"
+		}
+		_, _ = fmt.Fprintf(w, `{"data":{"BuiltinTag":{"count":4,"edges":[{"node":{"id":%q,"kind":"BuiltinTag"}}]}}}`, id)
+	})
+	defer server.Close()
+
+	nodes, err := service.All(context.Background(), "BuiltinTag", QueryOptions{
+		Branch:     "main",
+		Offset:     2,
+		Filters:    []Filter{{Name: "name__value", Value: "staging"}},
+		Selections: []Selection{Select("name", Select("value"))},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := offsets, []float64{2, 3}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("offsets = %#v, want %#v", got, want)
+	}
+	if len(nodes) != 2 || nodes[0].ID != "tag-2" || nodes[1].ID != "tag-3" {
+		t.Fatalf("All() = %#v", nodes)
+	}
+}
+
+func TestAllReturnsPaginationError(t *testing.T) {
+	t.Parallel()
+	var requests atomic.Int32
+	service, server := newTestService(t, func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{"data":{"BuiltinTag":{"count":2,"edges":[{"node":{"id":"tag-1","kind":"BuiltinTag"}}]}}}`))
+			return
+		}
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	})
+	defer server.Close()
+
+	nodes, err := service.All(context.Background(), "BuiltinTag", QueryOptions{Limit: 1})
+	if err == nil || nodes != nil {
+		t.Fatalf("All() = %#v, %v", nodes, err)
 	}
 }
 
