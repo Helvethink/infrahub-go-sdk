@@ -13,6 +13,8 @@ import (
 	"github.com/Helvethink/infrahub-go-sdk/pkg/api"
 )
 
+const defaultPageSize = 100
+
 // Selection describes one field in a dynamic GraphQL selection set. Fields
 // contains nested selections for attributes, relationships, or other objects.
 type Selection struct {
@@ -73,6 +75,32 @@ func (s *Service) Query(ctx context.Context, kind string, options QueryOptions) 
 		requestcontext.RecordNodeIDs(ctx, ids...)
 	}
 	return page, err
+}
+
+// All retrieves every node matching options.Filters, starting at options.Offset.
+// Limit controls the page size rather than the total number returned. A zero
+// limit uses 100 nodes per page.
+func (s *Service) All(ctx context.Context, kind string, options QueryOptions) ([]Node, error) {
+	if options.Offset < 0 || options.Limit < 0 {
+		return nil, fmt.Errorf("infrahub: offset and limit must not be negative")
+	}
+	if options.Limit == 0 {
+		options.Limit = defaultPageSize
+	}
+
+	nodes := make([]Node, 0)
+	for {
+		page, err := s.Query(ctx, kind, options)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, page.Nodes...)
+		nextOffset := page.Offset + len(page.Nodes)
+		if len(page.Nodes) == 0 || nextOffset >= page.Count {
+			return nodes, nil
+		}
+		options.Offset = nextOffset
+	}
 }
 
 // buildQuery builds the query.
