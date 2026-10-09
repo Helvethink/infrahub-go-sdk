@@ -21,7 +21,17 @@ page, err := client.Nodes.Query(ctx, "BuiltinTag", node.QueryOptions{
 })
 ```
 
-Identity fields (`id`, `kind`, `hfid`, and `display_label`) are always selected. Other decoded values are available in `Node.Fields`:
+Identity fields (`id`, `kind`, and `hfid`) are always selected. `display_label`
+is selected by default and can be omitted when it is not needed:
+
+```go
+page, err := client.Nodes.Query(ctx, "BuiltinTag", node.QueryOptions{
+    Branch:           "main",
+    OmitDisplayLabel: true,
+})
+```
+
+Other decoded values are available in `Node.Fields`:
 
 ```go
 name := page.Nodes[0].Fields["name"].(map[string]any)["value"]
@@ -41,6 +51,28 @@ nodes, err := client.Nodes.All(ctx, "BuiltinTag", node.QueryOptions{
     },
 })
 ```
+
+## Mutation response labels
+
+`Create`, `Update`, and `Upsert` keep returning `display_label` by default.
+Their `WithOptions` variants can omit it from the GraphQL response:
+
+```go
+tag, err := client.Nodes.UpsertWithOptions(
+    ctx,
+    "BuiltinTag",
+    map[string]any{"name": map[string]any{"value": "staging"}},
+    node.MutationOptions{
+        Branch:           "main",
+        OmitDisplayLabel: true,
+    },
+)
+```
+
+This option only changes the GraphQL selection set. Infrahub still computes and
+stores display labels during create, update, and upsert. Infrahub exposes no
+GraphQL mutation option to disable that server-side behavior. This contract was
+verified against the Infrahub `stable` branch at commit `4878077` on 2026-10-09.
 
 ## Relationships
 

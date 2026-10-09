@@ -81,12 +81,58 @@ func TestUpsertUsesGeneratedInputType(t *testing.T) {
 		if !strings.Contains(request.Query, "$data: BuiltinTagUpsertInput!") {
 			t.Errorf("query = %s", request.Query)
 		}
+		if !strings.Contains(request.Query, "display_label") {
+			t.Errorf("default mutation query omitted display_label: %s", request.Query)
+		}
 		_, _ = w.Write([]byte(`{"data":{"BuiltinTagUpsert":{"ok":true,"object":{"id":"tag-id","kind":"BuiltinTag","hfid":["staging"],"display_label":"staging"}}}}`))
 	})
 	defer server.Close()
 	upserted, err := service.Upsert(context.Background(), "BuiltinTag", map[string]any{"name": map[string]any{"value": "staging"}}, "")
 	if err != nil || upserted.ID != "tag-id" {
 		t.Fatalf("Upsert() = %#v, %v", upserted, err)
+	}
+}
+
+func TestMutationsWithOptionsOmitDisplayLabel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		operation string
+		call      func(*Service, context.Context, string, map[string]any, MutationOptions) (*Node, error)
+	}{
+		{name: "create", operation: "BuiltinTagCreate", call: (*Service).CreateWithOptions},
+		{name: "update", operation: "BuiltinTagUpdate", call: (*Service).UpdateWithOptions},
+		{name: "upsert", operation: "BuiltinTagUpsert", call: (*Service).UpsertWithOptions},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+				var request payload
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Error(err)
+					return
+				}
+				if request.OperationName != test.operation {
+					t.Errorf("operation = %q, want %q", request.OperationName, test.operation)
+				}
+				if strings.Contains(request.Query, "display_label") {
+					t.Errorf("query includes display_label: %s", request.Query)
+				}
+				if got, want := r.URL.EscapedPath(), "/graphql/feature%2Flabels"; got != want {
+					t.Errorf("path = %q, want %q", got, want)
+				}
+				_, _ = fmt.Fprintf(w, `{"data":{%q:{"ok":true,"object":{"id":"tag-id","kind":"BuiltinTag","hfid":["staging"]}}}}`, test.operation)
+			})
+			defer server.Close()
+
+			result, err := test.call(service, context.Background(), "BuiltinTag", map[string]any{
+				"name": map[string]any{"value": "staging"},
+			}, MutationOptions{Branch: "feature/labels", OmitDisplayLabel: true})
+			if err != nil || result.ID != "tag-id" || result.DisplayLabel != "" {
+				t.Fatalf("mutation = %#v, %v", result, err)
+			}
+		})
 	}
 }
 
@@ -212,6 +258,43 @@ func TestQueryDynamicFiltersAndSelections(t *testing.T) {
 	name, ok := page.Nodes[0].Fields["name"].(map[string]any)
 	if !ok || name["value"] != "staging" {
 		t.Fatalf("dynamic fields = %#v", page.Nodes[0].Fields)
+	}
+}
+
+func TestQueryCanOmitAutomaticDisplayLabel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name             string
+		selections       []Selection
+		wantDisplayLabel bool
+	}{
+		{name: "omitted", wantDisplayLabel: false},
+		{name: "explicitly selected", selections: []Selection{Select("display_label")}, wantDisplayLabel: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			service, server := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
+				var request payload
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Error(err)
+					return
+				}
+				if got := strings.Contains(request.Query, "display_label"); got != test.wantDisplayLabel {
+					t.Errorf("query display_label selection = %t, want %t: %s", got, test.wantDisplayLabel, request.Query)
+				}
+				_, _ = w.Write([]byte(`{"data":{"BuiltinTag":{"count":1,"edges":[{"node":{"id":"tag-id","kind":"BuiltinTag","hfid":["staging"]}}]}}}`))
+			})
+			defer server.Close()
+
+			page, err := service.Query(context.Background(), "BuiltinTag", QueryOptions{
+				OmitDisplayLabel: true,
+				Selections:       test.selections,
+			})
+			if err != nil || len(page.Nodes) != 1 || page.Nodes[0].ID != "tag-id" {
+				t.Fatalf("Query() = %#v, %v", page, err)
+			}
+		})
 	}
 }
 

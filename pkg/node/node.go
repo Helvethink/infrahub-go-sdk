@@ -13,7 +13,10 @@ import (
 
 var kindPattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
 
-const identityFields = `id kind: __typename hfid display_label`
+const (
+	identityFields                    = `id kind: __typename hfid display_label`
+	identityFieldsWithoutDisplayLabel = `id kind: __typename hfid`
+)
 
 // Node identifies an Infrahub object while preserving its dynamic fields.
 type Node struct {
@@ -83,6 +86,15 @@ type MutationResult struct {
 	Object *Node `json:"object"`
 }
 
+// MutationOptions configures a dynamic node create, update, or upsert.
+type MutationOptions struct {
+	// Branch selects or identifies the Infrahub branch.
+	Branch string
+	// OmitDisplayLabel omits display_label from the mutation response. Infrahub
+	// still computes and stores the display label as part of the mutation.
+	OmitDisplayLabel bool
+}
+
 // List returns identity fields for a page of nodes. Use Query for dynamic
 // filters, attributes, or relationships.
 func (s *Service) List(ctx context.Context, kind string, offset, limit int, branch string) (*Page, error) {
@@ -107,17 +119,50 @@ func (s *Service) GetByHFID(ctx context.Context, kind string, hfid []string, bra
 
 // Create creates a node of kind using its generated GraphQL input type.
 func (s *Service) Create(ctx context.Context, kind string, data map[string]any, branch string) (*Node, error) {
-	return s.mutate(ctx, kind, "Create", data, branch)
+	return s.CreateWithOptions(ctx, kind, data, MutationOptions{Branch: branch})
+}
+
+// CreateWithOptions creates a node of kind using its generated GraphQL input
+// type and controls the returned identity fields.
+func (s *Service) CreateWithOptions(
+	ctx context.Context,
+	kind string,
+	data map[string]any,
+	options MutationOptions,
+) (*Node, error) {
+	return s.mutate(ctx, kind, "Create", data, options)
 }
 
 // Update updates a node of kind. Data must include an Infrahub identifier.
 func (s *Service) Update(ctx context.Context, kind string, data map[string]any, branch string) (*Node, error) {
-	return s.mutate(ctx, kind, "Update", data, branch)
+	return s.UpdateWithOptions(ctx, kind, data, MutationOptions{Branch: branch})
+}
+
+// UpdateWithOptions updates a node of kind and controls the returned identity
+// fields. Data must include an Infrahub identifier.
+func (s *Service) UpdateWithOptions(
+	ctx context.Context,
+	kind string,
+	data map[string]any,
+	options MutationOptions,
+) (*Node, error) {
+	return s.mutate(ctx, kind, "Update", data, options)
 }
 
 // Upsert creates or updates a node of kind using its generated GraphQL input type.
 func (s *Service) Upsert(ctx context.Context, kind string, data map[string]any, branch string) (*Node, error) {
-	return s.mutate(ctx, kind, "Upsert", data, branch)
+	return s.UpsertWithOptions(ctx, kind, data, MutationOptions{Branch: branch})
+}
+
+// UpsertWithOptions creates or updates a node of kind and controls the returned
+// identity fields.
+func (s *Service) UpsertWithOptions(
+	ctx context.Context,
+	kind string,
+	data map[string]any,
+	options MutationOptions,
+) (*Node, error) {
+	return s.mutate(ctx, kind, "Upsert", data, options)
 }
 
 // Delete deletes a node of kind. Data usually contains id or hfid.
@@ -144,15 +189,24 @@ func (s *Service) Delete(ctx context.Context, kind string, data map[string]any, 
 }
 
 // mutate executes a dynamic node mutation and validates its operation result.
-func (s *Service) mutate(ctx context.Context, kind, action string, input map[string]any, branch string) (*Node, error) {
+func (s *Service) mutate(
+	ctx context.Context,
+	kind, action string,
+	input map[string]any,
+	options MutationOptions,
+) (*Node, error) {
 	if err := validateKind(kind); err != nil {
 		return nil, err
 	}
 	operation := kind + action
+	fields := identityFields
+	if options.OmitDisplayLabel {
+		fields = identityFieldsWithoutDisplayLabel
+	}
 	var data map[string]MutationResult
 	err := s.client.Execute(ctx, api.GraphQLRequest{
-		Query:     `mutation ` + operation + `($data: ` + operation + `Input!) { ` + operation + `(data: $data) { ok object { ` + identityFields + ` } } }`,
-		Variables: map[string]any{"data": input}, OperationName: operation, Branch: branch,
+		Query:     `mutation ` + operation + `($data: ` + operation + `Input!) { ` + operation + `(data: $data) { ok object { ` + fields + ` } } }`,
+		Variables: map[string]any{"data": input}, OperationName: operation, Branch: options.Branch,
 		Tracker: "mutation-node-" + action,
 	}, &data)
 	result := data[operation]

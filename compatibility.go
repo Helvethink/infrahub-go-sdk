@@ -98,6 +98,8 @@ type (
 	NodePage = node.Page
 	// NodeMutationResult describes the result of a node mutation.
 	NodeMutationResult = node.MutationResult
+	// NodeMutationOptions configures a schema-defined node mutation.
+	NodeMutationOptions = node.MutationOptions
 	// NodeService provides generic schema-defined node operations.
 	NodeService = node.Service
 

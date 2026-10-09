@@ -55,11 +55,15 @@ type QueryOptions struct {
 	Filters []Filter
 	// Selections contains the selections value.
 	Selections []Selection
+	// OmitDisplayLabel omits the automatically selected top-level display_label.
+	// An explicit display_label selection still includes it.
+	OmitDisplayLabel bool
 }
 
 // Query filters nodes of kind and returns caller-selected dynamic fields.
-// Identity fields are always included. Filter values are sent as GraphQL
-// variables and are never interpolated into the query document.
+// ID, kind, and HFID are always included; display_label is included unless
+// options.OmitDisplayLabel is true. Filter values are sent as GraphQL variables
+// and are never interpolated into the query document.
 func (s *Service) Query(ctx context.Context, kind string, options QueryOptions) (*Page, error) {
 	request, err := buildQuery(kind, options)
 	if err != nil {
@@ -111,7 +115,7 @@ func buildQuery(kind string, options QueryOptions) (api.GraphQLRequest, error) {
 	if options.Offset < 0 || options.Limit < 0 {
 		return api.GraphQLRequest{}, fmt.Errorf("infrahub: offset and limit must not be negative")
 	}
-	selection, err := renderSelections(options.Selections)
+	selection, err := renderSelections(options.Selections, options.OmitDisplayLabel)
 	if err != nil {
 		return api.GraphQLRequest{}, err
 	}
@@ -152,10 +156,14 @@ func buildQuery(kind string, options QueryOptions) (api.GraphQLRequest, error) {
 }
 
 // renderSelections renders the selections.
-func renderSelections(selections []Selection) (string, error) {
-	result := []string{"id", "kind: __typename", "hfid", "display_label"}
+func renderSelections(selections []Selection, omitDisplayLabel bool) (string, error) {
+	result := []string{"id", "kind: __typename", "hfid"}
 	identity := map[string]struct{}{"id": {}, "kind": {}, "hfid": {}, "display_label": {}}
-	seen := map[string]struct{}{"id": {}, "kind": {}, "hfid": {}, "display_label": {}}
+	seen := map[string]struct{}{"id": {}, "kind": {}, "hfid": {}}
+	if !omitDisplayLabel {
+		result = append(result, "display_label")
+		seen["display_label"] = struct{}{}
+	}
 	for _, selection := range selections {
 		rendered, err := renderSelection(selection)
 		if err != nil {
