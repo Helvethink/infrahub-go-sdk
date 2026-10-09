@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   require-ci:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, infomaniak]
     timeout-minutes: 30
     permissions:
       actions: read
@@ -76,7 +76,7 @@ jobs:
 
   release:
     needs: require-ci
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, infomaniak]
     timeout-minutes: 45
     permissions:
       packages: write

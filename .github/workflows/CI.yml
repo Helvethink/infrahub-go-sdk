@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, infomaniak]
     timeout-minutes: 10
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -60,7 +60,7 @@ jobs:
 
   test:
     needs: lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, infomaniak]
     timeout-minutes: 15
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -90,7 +90,7 @@ jobs:
 
   build:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, infomaniak]
     timeout-minutes: 10
     steps:
       - name: Harden the runner (Audit all outbound calls)
